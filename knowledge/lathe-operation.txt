@@ -1,0 +1,47 @@
+ENGINE LATHE OPERATION
+Mentor Knowledge Guide — FIRST Robotics Team
+
+SAFETY REQUIREMENTS
+Eye protection is non-negotiable. Use a chip shield whenever available. Never wear gloves — they catch the chuck and pull your hand in. Tie back long hair and keep hands clear of the rotating chuck. If chips wrap around the work ("bird's nest"), stop before clearing them.
+
+MACHINE OVERVIEW
+The headstock holds the spindle and chuck. The tailstock at the opposite end supports long work or holds a drill chuck. The carriage carries the cutting tool along the bed. The cross-slide controls tool depth (and therefore diameter). The compound rest mounts on the cross-slide and can be angled for tapers or threading. Know each handwheel before turning the machine on.
+
+WORKHOLDING
+3-jaw chuck: Self-centering, fast to load, good for round or hex stock. Runout is 0.005"–0.015" — fine for most robot parts. Use this 90% of the time.
+4-jaw chuck: Each jaw adjusts independently for better concentricity or irregular stock. Indicate the part to under 0.001" runout when precision matters.
+Stick-out rule: Support any workpiece extending more than 3x its diameter with a live center in the tailstock.
+
+TURNING OPERATIONS
+OD Turning: Move the carriage along Z while the cross-slide sets depth. Roughing passes: 0.050"–0.100" on aluminum, 0.020"–0.050" on steel.
+Facing: Feed the cross-slide inward to flatten the end. Face before any other operation.
+Parting: Narrow parting blade, low RPM, cutting oil. Feed steadily — hesitating causes chatter.
+Boring: Enlarges an existing hole with a boring bar. Take light passes; boring bars chatter easily.
+Threading: Lead screw engages to the spindle to cut helical grooves. Set the gear ratio on the quick-change gearbox and practice on scrap first.
+
+SPEEDS AND FEEDS
+RPM = (SFM x 3.82) / diameter
+
+Typical SFM: 6061 aluminum 200–400, mild steel 80–120, stainless 50–70. Reduce RPM for larger diameters. A good cut produces continuous curling chips — not dust or crumbs.
+
+TOOL GEOMETRY
+Rake angle: Positive rake cuts more freely but is weaker — use positive for aluminum, neutral for steel.
+Relief angle: Prevents the tool heel from rubbing; typically 8–12 degrees.
+Nose radius: Larger radius improves finish but increases cutting force. Use 0.015"–0.031" for most finish turning.
+
+USING THE TAILSTOCK
+Mount a drill chuck in the tailstock and advance the quill to feed the drill. Always center-drill first. A live center (with a bearing) is preferred; a dead center (solid cone) requires grease and suits light, slow cuts.
+
+MEASURING DURING OPERATION
+Always stop the machine to measure. Calipers work for quick checks (0.001" resolution); use a micrometer for final diameters (0.0001"). Leave 0.010"–0.020" for your finish pass. Remember: diameter changes are twice the depth of cut — a 0.010" cross-slide move removes 0.020" from diameter.
+
+KNURLING BASICS
+Knurling presses a diamond or straight pattern into the surface for grip. Use high pressure, low RPM, and cutting oil. Center the tool on the workpiece and take a full-width pass in one go.
+
+SHUTDOWN AND CLEANUP
+Move the carriage away from the chuck before powering off. Wait for the spindle to stop fully. Remove the chuck key immediately — never leave it in the chuck. Brush chips away (not with bare hands), wipe down the ways, and apply a thin oil film to prevent rust.
+
+COMMON MISTAKES
+Tool digs in: Tool set below center causes it to grab. Set tool height exactly at center.
+Chatter: Too much stick-out, loose compound, or wrong speed. Shorten the tool, tighten gibs, adjust RPM.
+Poor finish: Dull insert, too fast a feed, or wrong nose radius. Slow the feed and replace the insert. On aluminum, WD-40 helps significantly.

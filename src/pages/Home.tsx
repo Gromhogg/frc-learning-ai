@@ -1,0 +1,133 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import TopicPicker from "../components/topic-picker";
+import { useAuth } from "../context/AuthContext";
+
+interface Topic {
+  id: number;
+  name: string;
+  slug: string;
+  filePath: string;
+}
+
+export default function Home() {
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
+  const [topics, setTopics] = useState<Topic[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("http://localhost:3001/api/topics")
+      .then((r) => {
+        if (!r.ok) throw new Error(`Topics API error: ${r.status}`);
+        return r.json() as Promise<Topic[]>;
+      })
+      .then((data) => { if (!cancelled) setTopics(data); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Could not reach the server."); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+
+    return () => { cancelled = true; };
+  }, []);
+
+  function handleTopicSelect(topic: Topic) {
+    setSelectedTopic(topic);
+    if (!user) return;
+    const params = new URLSearchParams({
+      userId: String(user.id),
+      topicId: String(topic.id),
+      topicName: topic.name,
+      userName: user.name,
+    });
+    navigate(`/chat?${params.toString()}`);
+  }
+
+  // ── Render states ──────────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-screen bg-[var(--bg)]">
+        <div className="flex flex-col items-center gap-4 text-[var(--text)]">
+          <svg className="animate-spin h-10 w-10 text-[var(--accent)]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+          </svg>
+          <p className="text-sm font-medium">Loading topics…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-1 items-center justify-center min-h-screen bg-[var(--bg)]">
+        <div className="max-w-md w-full mx-4 rounded-xl border-2 border-red-500/40 bg-red-500/10 px-6 py-5 text-center">
+          <p className="text-base font-semibold text-red-400">Connection error</p>
+          <p className="mt-2 text-sm text-[var(--text)]">{error}</p>
+          <p className="mt-3 text-xs text-[var(--text)] opacity-70">
+            Run <code className="text-xs px-1.5 py-0.5 rounded bg-[var(--border)] text-[var(--text-h)]">npm run server</code> to start the API.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <main className="flex flex-col flex-1 bg-[var(--bg)]">
+      <div className="w-full max-w-3xl mx-auto px-6 py-12">
+
+        {/* ── Header ── */}
+        <header className="mb-12 text-center">
+          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-bg)] text-xs font-semibold tracking-widest uppercase text-[var(--accent)]">
+            <span>⚙</span>
+            <span>Robotics Team</span>
+          </div>
+          <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-[var(--text-h)] mb-3">
+            FRC Team Knowledge<br className="hidden sm:block" /> Assessment
+          </h1>
+          {user && (
+            <p className="text-base text-[var(--text)]">
+              Welcome, <span className="font-semibold text-[var(--text-h)]">{user.name}</span>
+            </p>
+          )}
+        </header>
+
+        {/* ── Topic picker ── */}
+        <section className="mb-8">
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[var(--text)] mb-3">
+            Choose a topic to begin
+          </p>
+          <TopicPicker
+            topics={topics}
+            selectedTopicId={selectedTopic?.id ?? null}
+            onSelect={handleTopicSelect}
+          />
+        </section>
+
+        {/* ── Footer ── */}
+        <div className="mt-12 pt-8 border-t border-[var(--border)] flex items-center justify-between">
+          <a
+            href="/results"
+            className="inline-flex items-center gap-2 text-sm text-[var(--text)] hover:text-[var(--accent)] transition-colors duration-150"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+            </svg>
+            View Assessment Results
+          </a>
+          <button
+            onClick={() => { logout(); navigate("/login"); }}
+            className="text-sm text-[var(--text)] opacity-50 hover:opacity-100 hover:text-red-400 transition-all"
+          >
+            Sign out
+          </button>
+        </div>
+
+      </div>
+    </main>
+  );
+}

@@ -1,0 +1,43 @@
+VERTICAL MILLING MACHINE OPERATION
+Mentor Knowledge Guide — FIRST Robotics Team
+
+SAFETY REQUIREMENTS
+Safety glasses are mandatory — actual ANSI-rated eyewear, not sunglasses. Tie back long hair; a spinning end mill grabs it without warning. Remove all loose jewelry. Wear close-toed shoes and no loose sleeves. If something feels wrong mid-cut, hit the E-stop and ask a mentor.
+
+MACHINE OVERVIEW
+A vertical milling machine holds a rotating cutting tool (the spindle) above a workpiece mounted on a movable table. The table moves in X (left/right), Y (front/back), and Z (up/down) axes using handwheels or power feed. The quill is a separate Z-axis on the head that allows quick plunge moves without repositioning the knee. The spindle speed is set via belts or a variable-speed dial depending on the machine.
+
+SETUP — SECURING THE WORKPIECE
+Mount the vise and tighten it with T-bolts. Indicate the jaw using a dial test indicator — tap until runout is under 0.002". Place stock on parallels in the vise and seat it with a dead-blow mallet. Zero your axes with an edge finder: touch off each edge, split the difference, and set your DRO to zero.
+
+TOOL SELECTION — END MILLS
+For aluminum, use uncoated or ZrN-coated 2-flute end mills — the extra flute gullet clears chips better. For steel, switch to 4-flute TiN or TiAlN-coated end mills. Size matters: a larger diameter end mill is stiffer and handles heavier cuts; a smaller one fits tighter pockets. Never use a dull tool — a dull end mill pushes instead of cuts and causes chatter or tool pull-out.
+
+SPEEDS AND FEEDS
+RPM = (SFM x 3.82) / tool diameter
+
+Typical SFM values:
+- 6061 aluminum: 300–600 SFM
+- Mild steel (1018): 80–120 SFM
+- Stainless steel (304): 50–80 SFM
+
+Feed rate (IPM) = RPM x chip load x number of flutes. Start conservative and increase until you get clean, curling chips, not dust or blue smoke.
+
+COMMON OPERATIONS
+Facing: Use a fly cutter or face mill to flatten a surface. Take light passes (0.05") at a high step-over.
+Slotting: Full-width cut equal to tool diameter. Reduce your feed rate by 30–50% — this is the hardest cut for the tool.
+Profiling: Side-milling with 25–50% radial engagement. Climb milling gives a better finish on aluminum.
+Drilling: Center drill first, then drill to size. A mill is more accurate than a drill press for hole location.
+
+DEPTH OF CUT
+Roughing passes: up to 1x tool diameter axially, 50% radially. Leave 0.010–0.020" for finish.
+Finishing passes: 0.005–0.010" depth, full or near-full axial depth of the finished wall.
+
+CHIP EVACUATION AND COOLANT
+Aluminum chips pack fast. Use an air blast or WD-40 mist to clear chips from the cut. Never let chips re-cut — this dulls tools and mars the surface. For steel, use cutting oil on the tool and workpiece.
+
+SHUTDOWN AND CLEANUP
+Return the table to center. Power off the spindle and wait for it to fully stop before reaching near it. Remove and store tools in a holder, never loose on the table. Brush chips into the chip pan — do not use your hands. Wipe down the table and vise with a lightly oiled rag.
+
+COMMON MISTAKES AND CHATTER
+Chatter is a rattling or squealing that leaves a wavy pattern on the surface. Causes: tool sticking out too far, loose vise, wrong spindle speed, or too aggressive a feed. Fix it by shortening tool stick-out, adjusting RPM, or reducing depth of cut. Stop and diagnose before continuing — don't push through it.
