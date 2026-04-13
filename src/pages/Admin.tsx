@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -139,13 +139,25 @@ function ChatLogView({ rawLog }: { rawLog: string }) {
 type Tab = "overview" | "knowledge" | "roster";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
-  const tabs: { id: Tab; label: string; icon: string }[] = [
-    { id: "overview", label: "Overview", icon: "📊" },
-    { id: "knowledge", label: "Knowledge Base", icon: "📚" },
-    { id: "roster", label: "Roster", icon: "👥" },
+  const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
+    { id: "overview", label: "Overview", icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+      </svg>
+    )},
+    { id: "knowledge", label: "Knowledge Base", icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+    )},
+    { id: "roster", label: "Roster", icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    )},
   ];
   return (
-    <div className="flex gap-1 border-b border-[var(--border)] mb-8">
+    <div className="flex gap-1 border-b border-[var(--border)] mb-6">
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -157,7 +169,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
               : "border-transparent text-[var(--text)] hover:text-[var(--text-h)]",
           ].join(" ")}
         >
-          <span>{t.icon}</span>
+          {t.icon}
           {t.label}
         </button>
       ))}
@@ -178,14 +190,18 @@ function OverviewTab({
   topics,
   assessments,
   onDeleteAssessment,
+  onEditScore,
 }: {
   users: User[];
   topics: Topic[];
   assessments: Assessment[];
   onDeleteAssessment: (id: number) => Promise<void>;
+  onEditScore: (id: number, score: number) => Promise<void>;
 }) {
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<number | null>(null);
+  const [editingScoreId, setEditingScoreId] = useState<number | null>(null);
+  const [editScoreValue, setEditScoreValue] = useState("");
   const [summaries, setSummaries] = useState<Record<number, MemberSummary>>({});
   const hasFetchedRef = useRef(false);
 
@@ -308,7 +324,7 @@ function OverviewTab({
                 key={topic.id}
                 className="flex items-center gap-3 rounded-xl border border-yellow-500/25 bg-yellow-500/8 px-4 py-3"
               >
-                <span className="text-yellow-400">⚠</span>
+                <svg className="text-yellow-400 flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                 <p className="text-sm text-[var(--text-h)] flex-1">
                   <span className="font-semibold">{topic.name}</span>
                   {" — "}
@@ -410,6 +426,7 @@ function OverviewTab({
                       <div className="flex flex-col gap-2">
                         {memberAssessments.map((a) => {
                           const isExpA = expandedAssessmentId === a.id;
+                          const isEditingScore = editingScoreId === a.id;
                           return (
                             <div key={a.id} className="rounded-lg border border-[var(--border)] overflow-hidden">
                               <div className="flex items-center hover:bg-[var(--card-bg)] transition-colors">
@@ -423,9 +440,64 @@ function OverviewTab({
                                     </svg>
                                   </span>
                                   <span className="flex-1 text-[var(--text-h)] font-medium">{a.topicName}</span>
-                                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 ${scoreBadgeBg(a.score)}`}>{a.score}%</span>
                                   <span className="text-xs text-[var(--text)] opacity-50 flex-shrink-0">{formatDate(a.createdAt)}</span>
                                 </button>
+
+                                {/* Score — badge or inline editor */}
+                                {isEditingScore ? (
+                                  <div className="flex items-center gap-1 mr-1" onClick={(e) => e.stopPropagation()}>
+                                    <input
+                                      type="number"
+                                      min={0}
+                                      max={100}
+                                      value={editScoreValue}
+                                      onChange={(e) => setEditScoreValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          const v = Math.max(0, Math.min(100, parseInt(editScoreValue, 10)));
+                                          if (!isNaN(v)) void onEditScore(a.id, v).then(() => setEditingScoreId(null));
+                                        }
+                                        if (e.key === "Escape") setEditingScoreId(null);
+                                      }}
+                                      autoFocus
+                                      className="w-14 rounded-md border border-[var(--accent)] bg-[var(--card-bg)] text-[var(--text-h)] text-xs font-bold text-center px-1 py-0.5 focus:outline-none"
+                                    />
+                                    <button
+                                      onClick={() => {
+                                        const v = Math.max(0, Math.min(100, parseInt(editScoreValue, 10)));
+                                        if (!isNaN(v)) void onEditScore(a.id, v).then(() => setEditingScoreId(null));
+                                      }}
+                                      className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+                                      title="Save"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <polyline points="20 6 9 17 4 12" />
+                                      </svg>
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingScoreId(null)}
+                                      className="p-1 rounded text-[var(--text)] opacity-50 hover:opacity-100 transition-colors"
+                                      title="Cancel"
+                                    >
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                                      </svg>
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setEditScoreValue(String(a.score)); setEditingScoreId(a.id); }}
+                                    title="Edit score"
+                                    className={`group flex items-center gap-1 text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 mr-1 ${scoreBadgeBg(a.score)} hover:ring-2 hover:ring-[var(--accent)] transition-all`}
+                                  >
+                                    {a.score}%
+                                    <svg className="opacity-0 group-hover:opacity-70 transition-opacity" xmlns="http://www.w3.org/2000/svg" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                    </svg>
+                                  </button>
+                                )}
+
                                 <button
                                   onClick={() => void onDeleteAssessment(a.id)}
                                   title="Delete assessment"
@@ -566,12 +638,24 @@ function KnowledgeTab({
         <p className="text-sm text-[var(--text)]">
           Edit knowledge files that the AI uses during assessments. Changes take effect immediately on the next chat session.
         </p>
-        <button
-          onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
-          className="flex-shrink-0 flex items-center gap-1.5 ml-4 px-3 py-1.5 rounded-lg border border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-bg)] text-xs font-semibold hover:bg-[var(--accent)] hover:text-white transition-colors"
-        >
-          + Add Topic
-        </button>
+        <div className="flex items-center gap-2 ml-4 flex-shrink-0">
+          <button
+            onClick={() => void fetch("http://localhost:3001/api/topics/open-knowledge-folder", { method: "POST" })}
+            title="Open the knowledge folder in Finder"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text)] text-xs font-semibold hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            Open Knowledge Folder
+          </button>
+          <button
+            onClick={() => { setShowAdd((v) => !v); setAddError(null); }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--accent)] text-[var(--accent)] bg-[var(--accent-bg)] text-xs font-semibold hover:bg-[var(--accent)] hover:text-white transition-colors"
+          >
+            + Add Topic
+          </button>
+        </div>
       </div>
 
       {/* Add topic form */}
@@ -634,6 +718,16 @@ function KnowledgeTab({
                     <p className="text-sm font-semibold text-[var(--text-h)]">{topic.name}</p>
                     <p className="text-xs text-[var(--text)] opacity-60 font-mono mt-0.5">{topic.filePath}</p>
                   </div>
+                  <button
+                    onClick={() => void fetch(`http://localhost:3001/api/topics/${topic.id}/open-folder`, { method: "POST" })}
+                    title="Open topic folder in Finder"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border border-[var(--border)] text-[var(--text)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                    Open Folder
+                  </button>
                   <button
                     onClick={() => void startEdit(topic)}
                     className={[
@@ -878,6 +972,17 @@ export default function Admin() {
     setAssessments((prev) => prev.filter((a) => a.id !== id));
   }
 
+  async function handleEditScore(id: number, score: number) {
+    const res = await fetch(`http://localhost:3001/api/assessments/${id}/score`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ score }),
+    });
+    if (res.ok) {
+      setAssessments((prev) => prev.map((a) => a.id === id ? { ...a, score } : a));
+    }
+  }
+
   const fetchAll = useCallback(async () => {
     try {
       const [usersRes, topicsRes, assessmentsRes] = await Promise.all([
@@ -940,9 +1045,9 @@ export default function Admin() {
   }
 
   return (
-    <main className="flex flex-col flex-1 bg-[var(--bg)] px-4 sm:px-8 py-10 max-w-5xl mx-auto w-full">
+    <main className="flex flex-col flex-1 bg-[var(--bg)] px-4 sm:px-8 pt-6 pb-10 max-w-5xl mx-auto w-full">
       {/* Header */}
-      <header className="mb-8">
+      <header className="mb-0">
         <div className="inline-flex items-center gap-2 mb-3 px-3 py-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-bg)] text-xs font-semibold tracking-widest uppercase text-[var(--accent)]">
           <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -958,7 +1063,7 @@ export default function Admin() {
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" && (
-        <OverviewTab users={users} topics={topics} assessments={assessments} onDeleteAssessment={handleDeleteAssessment} />
+        <OverviewTab users={users} topics={topics} assessments={assessments} onDeleteAssessment={handleDeleteAssessment} onEditScore={handleEditScore} />
       )}
       {activeTab === "knowledge" && (
         <KnowledgeTab topics={topics} onTopicsChange={() => void fetchAll()} />

@@ -1,3 +1,5 @@
+import React from 'react';
+
 interface Topic {
   id: number;
   name: string;
@@ -11,19 +13,29 @@ interface TopicPickerProps {
   onSelect: (topic: Topic) => void;
 }
 
-// Simple emoji icons based on common FRC topic keywords
-function topicIcon(slug: string): string {
+// SVG icons based on common FRC topic keywords
+function topicIcon(slug: string): React.ReactNode {
   const s = slug.toLowerCase();
-  if (s.includes('drive') || s.includes('swerve') || s.includes('chassis')) return '🚗';
-  if (s.includes('sensor') || s.includes('vision') || s.includes('camera')) return '📷';
-  if (s.includes('program') || s.includes('code') || s.includes('software')) return '💻';
-  if (s.includes('electrical') || s.includes('wiring') || s.includes('power')) return '⚡';
-  if (s.includes('mechanic') || s.includes('build') || s.includes('structure')) return '🔧';
-  if (s.includes('pneumat') || s.includes('piston')) return '💨';
-  if (s.includes('safety') || s.includes('pit')) return '🦺';
-  if (s.includes('game') || s.includes('strategy') || s.includes('auto')) return '🎯';
-  if (s.includes('climb') || s.includes('arm') || s.includes('lift')) return '🦾';
-  return '📚';
+  const props = { width: 22, height: 22, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.75, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (s.includes('drive') || s.includes('swerve') || s.includes('chassis'))
+    return <svg {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><line x1="12" y1="2" x2="12" y2="9"/><line x1="12" y1="15" x2="12" y2="22"/><line x1="2" y1="12" x2="9" y2="12"/><line x1="15" y1="12" x2="22" y2="12"/></svg>;
+  if (s.includes('sensor') || s.includes('vision') || s.includes('camera'))
+    return <svg {...props}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>;
+  if (s.includes('program') || s.includes('code') || s.includes('software'))
+    return <svg {...props}><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>;
+  if (s.includes('electrical') || s.includes('wiring') || s.includes('power'))
+    return <svg {...props}><polyline points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>;
+  if (s.includes('mechanic') || s.includes('build') || s.includes('structure'))
+    return <svg {...props}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>;
+  if (s.includes('pneumat') || s.includes('piston'))
+    return <svg {...props}><path d="M5 12H2"/><path d="M22 12h-3"/><rect x="9" y="8" width="6" height="8" rx="1"/><path d="M9 10H7a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h2"/><path d="M15 10h2a1 1 0 0 1 1 1v2a1 1 0 0 1-1 1h-2"/></svg>;
+  if (s.includes('safety') || s.includes('pit'))
+    return <svg {...props}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>;
+  if (s.includes('game') || s.includes('strategy') || s.includes('auto'))
+    return <svg {...props}><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>;
+  if (s.includes('climb') || s.includes('arm') || s.includes('lift'))
+    return <svg {...props}><polyline points="17 11 12 6 7 11"/><line x1="12" y1="18" x2="12" y2="6"/></svg>;
+  return <svg {...props}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>;
 }
 
 export default function TopicPicker({ topics, selectedTopicId, onSelect }: TopicPickerProps) {
@@ -52,7 +64,7 @@ export default function TopicPicker({ topics, selectedTopicId, onSelect }: Topic
             ].join(' ')}
           >
             <div className="flex items-start gap-3">
-              <span className="text-2xl leading-none mt-0.5 flex-shrink-0" role="img" aria-hidden="true">
+              <span className="flex-shrink-0 mt-0.5 text-[var(--text-h)] opacity-70" aria-hidden="true">
                 {topicIcon(topic.slug)}
               </span>
               <div className="min-w-0">

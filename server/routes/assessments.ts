@@ -66,12 +66,15 @@ app.post("/extract-score", async (c) => {
       messages: [
         {
           role: "user",
-          content: `The following is a JSON-encoded chat log from a robotics team knowledge assessment session. Your job is to extract the final score the mentor assigned to the student.
+          content: `The following is a JSON-encoded chat log from a robotics team knowledge assessment session. Your job is to calculate the student's score.
 
 Rules:
+- Score = round((sum of per-answer scores ÷ questions answered) × 100).
+- For each question the mentor asked, assign the student's answer a score from 0.0 to 1.0: 1.0 fully correct, 0.0 fully wrong, partial values (e.g. 0.25, 0.5, 0.75) for partially correct answers.
+- For multiple-choice quiz widgets, use the correctIndex as ground truth but still allow partial credit if the answer shows partial understanding.
+- If an explicit "Score: X/100" line appears at the end of the chat, trust that value directly instead of re-calculating.
 - Return ONLY a single integer between 0 and 100 — nothing else, no explanation.
-- If no explicit score is mentioned, estimate one based on the quality of the student's answers.
-- If the chat is empty or you cannot determine any score at all, return 0.
+- If the chat is empty or no questions were answered, return 0.
 
 Chat log:
 ${body.chatLog}`,
@@ -109,6 +112,20 @@ app.post("/", async (c) => {
     .returning();
 
   return c.json(newAssessment, 201);
+});
+
+// PATCH /api/assessments/:id/score — manually override a score
+app.patch("/:id/score", async (c) => {
+  const id = Number(c.req.param("id"));
+  const body = await c.req.json<{ score: number }>();
+  const score = Math.max(0, Math.min(100, Math.round(body.score)));
+  const [updated] = await db
+    .update(assessments)
+    .set({ score })
+    .where(eq(assessments.id, id))
+    .returning();
+  if (!updated) return c.json({ error: "Not found" }, 404);
+  return c.json({ ok: true, score: updated.score });
 });
 
 // DELETE /api/assessments/:id — delete a single assessment

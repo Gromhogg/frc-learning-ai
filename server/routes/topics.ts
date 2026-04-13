@@ -1,6 +1,7 @@
 import { Hono } from "hono";
-import { existsSync, readFileSync, writeFileSync, unlinkSync } from "fs";
-import { join } from "path";
+import { existsSync, readFileSync, writeFileSync, unlinkSync, mkdirSync, rmSync } from "fs";
+import { join, dirname } from "path";
+import { execFile } from "child_process";
 import { db } from "../../db/index.ts";
 import { topics } from "../../db/schema.ts";
 import { eq } from "drizzle-orm";
@@ -43,7 +44,7 @@ app.put("/:id/content", async (c) => {
   return c.json({ ok: true });
 });
 
-// POST /api/topics — create a new topic + knowledge file
+// POST /api/topics — create a new topic + knowledge folder + file
 app.post("/", async (c) => {
   const body = await c.req.json<{ name: string; content?: string }>();
 
@@ -51,8 +52,14 @@ app.post("/", async (c) => {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
-  const filePath = `knowledge/${slug}.txt`;
+
+  // Create a dedicated folder for this topic
+  const folderPath = `knowledge/${slug}`;
+  const filePath = `${folderPath}/${slug}.txt`;
+  const absFolderPath = join(process.cwd(), folderPath);
   const absPath = join(process.cwd(), filePath);
+
+  mkdirSync(absFolderPath, { recursive: true });
 
   const initialContent =
     body.content?.trim() ||
@@ -68,7 +75,30 @@ app.post("/", async (c) => {
   return c.json(newTopic, 201);
 });
 
-// DELETE /api/topics/:id — delete a topic and its file
+// POST /api/topics/open-knowledge-folder — open the root knowledge/ directory in Finder
+app.post("/open-knowledge-folder", async (c) => {
+  const knowledgeDir = join(process.cwd(), "knowledge");
+  execFile("open", [knowledgeDir]);
+  return c.json({ ok: true });
+});
+
+// POST /api/topics/:id/open-folder — reveal the topic's folder in Finder (macOS)
+app.post("/:id/open-folder", async (c) => {
+  const id = Number(c.req.param("id"));
+  const [topic] = await db.select().from(topics).where(eq(topics.id, id));
+  if (!topic) return c.json({ error: "Topic not found" }, 404);
+
+  const absFilePath = join(process.cwd(), topic.filePath);
+  const absFolderPath = dirname(absFilePath);
+
+  // Open the folder in Finder (or the parent knowledge/ dir for legacy flat files)
+  const targetPath = existsSync(absFolderPath) ? absFolderPath : join(process.cwd(), "knowledge");
+  execFile("open", [targetPath]);
+
+  return c.json({ ok: true });
+});
+
+// DELETE /api/topics/:id — delete a topic and its file/folder
 app.delete("/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const [topic] = await db.select().from(topics).where(eq(topics.id, id));
@@ -76,7 +106,13 @@ app.delete("/:id", async (c) => {
 
   if (topic.filePath.startsWith("knowledge/")) {
     const absPath = join(process.cwd(), topic.filePath);
-    if (existsSync(absPath)) unlinkSync(absPath);
+    const absFolderPath = dirname(absPath);
+    // If the file lives in its own topic folder, remove the whole folder
+    if (existsSync(absFolderPath) && absFolderPath !== join(process.cwd(), "knowledge")) {
+      try { rmSync(absFolderPath, { recursive: true, force: true }); } catch {}
+    } else if (existsSync(absPath)) {
+      unlinkSync(absPath);
+    }
   }
 
   await db.delete(topics).where(eq(topics.id, id));
