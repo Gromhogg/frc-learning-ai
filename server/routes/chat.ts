@@ -56,7 +56,7 @@ app.post('/', async (c) => {
     model: anthropic('claude-haiku-4-5-20251001'),
     system: systemPrompt,
     messages: modelMessages,
-    maxSteps: 1,
+    maxSteps: 3,
     tools: {
       showQuiz: tool({
         description:
@@ -79,9 +79,131 @@ app.post('/', async (c) => {
           type: 'object',
           properties: {
             title: { type: 'string', description: 'Title of the checklist' },
-            items: { type: 'array', items: { type: 'string' }, description: 'List of checklist items' },
+            items: { type: 'array', items: { type: 'string' }, description: 'List of checklist items (maximum 5)', maxItems: 5 },
           },
           required: ['title', 'items'],
+        }),
+        execute: async () => ({ displayed: true }),
+      }),
+      showDragOrder: tool({
+        description:
+          'Display a drag-and-drop ordering exercise where the student arranges items in the correct sequence.',
+        inputSchema: jsonSchema<{ instruction: string; items: string[] }>({
+          type: 'object',
+          properties: {
+            instruction: { type: 'string', description: 'What the student should order (e.g. "Put these mill setup steps in the correct order")' },
+            items: { type: 'array', items: { type: 'string' }, description: 'The items in their CORRECT order. The widget will shuffle them for display.' },
+          },
+          required: ['instruction', 'items'],
+        }),
+        execute: async () => ({ displayed: true }),
+      }),
+      showScenario: tool({
+        description:
+          'Display a multi-step diagnostic scenario where the student makes choices to walk through a troubleshooting or decision process.',
+        inputSchema: jsonSchema<{
+          title: string;
+          scenario: string;
+          steps: Array<{
+            id: string;
+            prompt: string;
+            choices: Array<{
+              text: string;
+              nextStepId: string | null;
+              feedback: string;
+              isOptimal: boolean;
+            }>;
+          }>;
+        }>({
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Short title for the scenario' },
+            scenario: { type: 'string', description: 'Initial situation description presented to the student' },
+            steps: {
+              type: 'array',
+              description: 'Decision tree steps. Every choice nextStepId must reference a valid step id, or null to end.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  prompt: { type: 'string' },
+                  choices: {
+                    type: 'array',
+                    items: {
+                      type: 'object',
+                      properties: {
+                        text: { type: 'string' },
+                        nextStepId: { type: ['string', 'null'] },
+                        feedback: { type: 'string' },
+                        isOptimal: { type: 'boolean' },
+                      },
+                      required: ['text', 'nextStepId', 'feedback', 'isOptimal'],
+                    },
+                  },
+                },
+                required: ['id', 'prompt', 'choices'],
+              },
+            },
+          },
+          required: ['title', 'scenario', 'steps'],
+        }),
+        execute: async () => ({ displayed: true }),
+      }),
+      showCodeRunner: tool({
+        description:
+          'Display a code/procedure editor where the student writes or completes a snippet. Used for G-code, pseudo-code, or structured procedures.',
+        inputSchema: jsonSchema<{
+          prompt: string;
+          language: string;
+          starterCode: string;
+          expectedPatterns: string[];
+          solutionCode: string;
+        }>({
+          type: 'object',
+          properties: {
+            prompt: { type: 'string', description: 'What the student should write or complete' },
+            language: { type: 'string', description: 'Language hint: gcode, pseudocode, or procedure' },
+            starterCode: { type: 'string', description: 'Pre-filled template. Use ___ for fill-in blanks, or empty string for free-write.' },
+            expectedPatterns: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Key terms the student answer should contain. Used for client-side scoring.',
+            },
+            solutionCode: { type: 'string', description: 'The complete correct answer, revealed on request after submission.' },
+          },
+          required: ['prompt', 'language', 'starterCode', 'expectedPatterns', 'solutionCode'],
+        }),
+        execute: async () => ({ displayed: true }),
+      }),
+      showLabeledDiagram: tool({
+        description:
+          'Display an interactive labeled diagram where the student matches part names to numbered hotspot positions.',
+        inputSchema: jsonSchema<{
+          title: string;
+          description: string;
+          parts: Array<{ id: string; label: string; hint: string; x: number; y: number }>;
+        }>({
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Diagram title (e.g. "Vertical Milling Machine — Front View")' },
+            description: { type: 'string', description: 'Brief text description to orient the student' },
+            parts: {
+              type: 'array',
+              description: 'Hotspot parts. Place in logical spatial positions: spindle top, table middle, base bottom. x/y are percentages where 0,0 = top-left, 100,100 = bottom-right.',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  label: { type: 'string', description: 'Correct part name' },
+                  hint: { type: 'string', description: 'Short hint shown after a wrong guess' },
+                  x: { type: 'number', description: 'Horizontal position as percentage (0–100)' },
+                  y: { type: 'number', description: 'Vertical position as percentage (0–100)' },
+                },
+                required: ['id', 'label', 'hint', 'x', 'y'],
+              },
+            },
+          },
+          required: ['title', 'description', 'parts'],
         }),
         execute: async () => ({ displayed: true }),
       }),
