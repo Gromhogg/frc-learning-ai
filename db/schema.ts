@@ -4,6 +4,11 @@ import { sql } from "drizzle-orm";
 export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  email: text("email").unique(),
+  googleId: text("google_id").unique(),
+  avatarUrl: text("avatar_url"),
+  status: text("status", { enum: ["pending", "approved", "rejected"] }).default("approved").notNull(),
+  role: text("role", { enum: ["student", "admin"] }).default("student").notNull(),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -21,4 +26,9 @@ export const assessments = sqliteTable("assessments", {
   score: integer("score"),
   chatLog: text("chat_log"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+export const settings = sqliteTable("settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
 });

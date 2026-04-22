@@ -19,10 +19,12 @@
     "@ai-sdk/react": "^3.0.160",
     "@hono/node-server": "^1.19.13",
     "ai": "^6.0.158",
+    "arctic": "^3.7.0",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
     "hono": "^4.12.12",
+    "jose": "^6.2.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.0"

@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { useAuth } from "../context/AuthContext";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ function ChatLogView({ rawLog }: { rawLog: string }) {
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "knowledge" | "roster";
+type Tab = "overview" | "knowledge" | "roster" | "access" | "settings";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -153,6 +154,17 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { id: "roster", label: "Roster", icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+      </svg>
+    )},
+    { id: "access", label: "Access", icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+      </svg>
+    )},
+    { id: "settings", label: "Settings", icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
+        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
     )},
   ];
@@ -261,16 +273,6 @@ function OverviewTab({
       ? Math.round(scoredMembers.reduce((sum, u) => sum + (summaries[u.id].score ?? 0), 0) / scoredMembers.length)
       : null;
 
-  // Gap analysis: topics where fewer than half the team has been assessed
-  const topicGaps = topics
-    .map((topic) => {
-      const assessed = new Set(assessments.filter((a) => a.topicId === topic.id).map((a) => a.userId));
-      const coverage = users.length > 0 ? Math.round((assessed.size / users.length) * 100) : 0;
-      const missing = users.length - assessed.size;
-      return { topic, coverage, missing };
-    })
-    .filter((t) => t.coverage < 50);
-
   // Sort members: loaded with scores first (desc), then loading, then no assessments
   const sortedUsers = [...users].sort((a, b) => {
     const sa = summaries[a.id];
@@ -311,31 +313,6 @@ function OverviewTab({
           <p className="text-xs font-semibold uppercase tracking-widest text-[var(--text)] mt-1">Team Avg</p>
         </div>
       </div>
-
-      {/* Gap analysis */}
-      {topicGaps.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)] mb-3">
-            Coverage Gaps
-          </h2>
-          <div className="flex flex-col gap-2">
-            {topicGaps.map(({ topic, coverage, missing }) => (
-              <div
-                key={topic.id}
-                className="flex items-center gap-3 rounded-xl border border-yellow-500/25 bg-yellow-500/8 px-4 py-3"
-              >
-                <svg className="text-yellow-400 flex-shrink-0" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                <p className="text-sm text-[var(--text-h)] flex-1">
-                  <span className="font-semibold">{topic.name}</span>
-                  {" — "}
-                  {missing} member{missing !== 1 ? "s" : ""} {missing !== 1 ? "haven't" : "hasn't"} been assessed yet
-                </p>
-                <span className="text-xs font-bold text-yellow-400 flex-shrink-0">{coverage}% coverage</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Member profiles with AI summaries */}
       <div>
@@ -957,9 +934,396 @@ function RosterTab({
   );
 }
 
+// ── Access tab ────────────────────────────────────────────────────────────────
+
+interface ManagedUser {
+  id: number;
+  name: string;
+  email: string | null;
+  avatarUrl: string | null;
+  status: "pending" | "approved" | "rejected";
+  role: "student" | "admin";
+  createdAt: string | null;
+}
+
+function AccessTab({ token }: { token: string | null }) {
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [actingId, setActingId] = useState<number | null>(null);
+
+  const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
+
+  async function fetchUsers() {
+    setLoading(true);
+    setAuthError(null);
+    try {
+      const res = await fetch("http://localhost:3001/api/admin/all-users", {
+        headers: authHeader,
+      });
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          setAuthError("This section requires a Google-authenticated admin account. Dev-mode / password sessions can't manage user access.");
+        } else {
+          setAuthError(`Server error (${res.status}).`);
+        }
+        setUsers([]);
+        return;
+      }
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        setAuthError("Unexpected server response.");
+        setUsers([]);
+        return;
+      }
+      setUsers(data as ManagedUser[]);
+    } catch {
+      setAuthError("Could not reach the server.");
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void fetchUsers(); }, []);
+
+  async function approve(id: number) {
+    setActingId(id);
+    await fetch(`http://localhost:3001/api/admin/users/${id}/approve`, {
+      method: "POST",
+      headers: authHeader,
+    });
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: "approved" } : u));
+    setActingId(null);
+  }
+
+  async function reject(id: number) {
+    setActingId(id);
+    await fetch(`http://localhost:3001/api/admin/users/${id}/reject`, {
+      method: "POST",
+      headers: authHeader,
+    });
+    setUsers((prev) => prev.map((u) => u.id === id ? { ...u, status: "rejected" } : u));
+    setActingId(null);
+  }
+
+  async function approveAll() {
+    const pendingIds = users.filter((u) => u.status === "pending").map((u) => u.id);
+    if (pendingIds.length === 0) return;
+    if (!confirm(`Approve all ${pendingIds.length} pending user${pendingIds.length !== 1 ? "s" : ""}?`)) return;
+
+    await Promise.all(
+      pendingIds.map((id) =>
+        fetch(`http://localhost:3001/api/admin/users/${id}/approve`, {
+          method: "POST",
+          headers: authHeader,
+        })
+      )
+    );
+    setUsers((prev) => prev.map((u) => pendingIds.includes(u.id) ? { ...u, status: "approved" } : u));
+  }
+
+  async function remove(id: number) {
+    if (!confirm("Permanently remove this user and all their data?")) return;
+    setActingId(id);
+    await fetch(`http://localhost:3001/api/admin/users/${id}/remove`, {
+      method: "POST",
+      headers: authHeader,
+    });
+    setUsers((prev) => prev.filter((u) => u.id !== id));
+    setActingId(null);
+  }
+
+  const pending = users.filter((u) => u.status === "pending");
+  const approved = users.filter((u) => u.status === "approved");
+  const rejected = users.filter((u) => u.status === "rejected");
+
+  if (loading) {
+    return <p className="text-sm text-[var(--text)] animate-pulse">Loading users…</p>;
+  }
+
+  if (authError) {
+    return (
+      <div className="rounded-xl border-2 border-yellow-500/40 bg-yellow-500/10 px-5 py-4 text-sm text-yellow-300">
+        <p className="font-semibold mb-1">Admin access required</p>
+        <p className="text-yellow-200/80">{authError}</p>
+      </div>
+    );
+  }
+
+  function statusBadge(status: ManagedUser["status"]) {
+    if (status === "approved") return "bg-emerald-900/40 text-emerald-300 border-emerald-700/40";
+    if (status === "pending") return "bg-yellow-900/40 text-yellow-300 border-yellow-700/40";
+    return "bg-red-900/40 text-red-400 border-red-700/40";
+  }
+
+  function UserRow({ user, showActions }: { user: ManagedUser; showActions: boolean }) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-4 py-3 bg-[var(--card-bg)]">
+        {user.avatarUrl ? (
+          <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full flex-shrink-0" />
+        ) : (
+          <span className="w-8 h-8 rounded-full bg-[var(--accent-bg)] border border-[var(--accent-border)] flex items-center justify-center text-xs font-bold text-[var(--accent)] flex-shrink-0">
+            {user.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-[var(--text-h)] truncate">{user.name}</p>
+          <p className="text-xs text-[var(--text)] opacity-60 truncate">{user.email ?? "—"}</p>
+        </div>
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 ${statusBadge(user.status)}`}>
+          {user.status}
+        </span>
+        {showActions && (
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {user.status !== "approved" && (
+              <button
+                onClick={() => void approve(user.id)}
+                disabled={actingId === user.id}
+                className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 disabled:opacity-40 transition-colors"
+              >
+                Approve
+              </button>
+            )}
+            {user.status !== "rejected" && user.role !== "admin" && (
+              <button
+                onClick={() => void reject(user.id)}
+                disabled={actingId === user.id}
+                className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-400 border border-red-400/30 text-xs font-semibold hover:bg-red-500/25 disabled:opacity-40 transition-colors"
+              >
+                Reject
+              </button>
+            )}
+            {user.role !== "admin" && (
+              <button
+                onClick={() => void remove(user.id)}
+                disabled={actingId === user.id}
+                title="Remove user"
+                className="p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-20 transition-all"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8">
+      {/* Pending */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)]">Pending Approval</h2>
+          {pending.length > 0 && (
+            <span className="px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-300 text-[10px] font-bold border border-yellow-700/40">
+              {pending.length}
+            </span>
+          )}
+          {pending.length > 1 && (
+            <button
+              onClick={() => void approveAll()}
+              className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 transition-colors"
+            >
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              Approve All
+            </button>
+          )}
+        </div>
+        {pending.length === 0 ? (
+          <p className="text-sm text-[var(--text)] italic opacity-60">No pending requests.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {pending.map((u) => <UserRow key={u.id} user={u} showActions />)}
+          </div>
+        )}
+      </div>
+
+      {/* Approved */}
+      <div>
+        <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)] mb-3">Approved</h2>
+        {approved.length === 0 ? (
+          <p className="text-sm text-[var(--text)] italic opacity-60">No approved users yet.</p>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {approved.map((u) => <UserRow key={u.id} user={u} showActions />)}
+          </div>
+        )}
+      </div>
+
+      {/* Rejected */}
+      {rejected.length > 0 && (
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)] mb-3">Rejected</h2>
+          <div className="flex flex-col gap-2">
+            {rejected.map((u) => <UserRow key={u.id} user={u} showActions />)}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Settings tab ─────────────────────────────────────────────────────────────
+
+function SettingsTab() {
+  const [minQuestions, setMinQuestions] = useState<number | null>(null);
+  const [minQInput, setMinQInput] = useState("");
+  const [minCorrect, setMinCorrect] = useState<number | null>(null);
+  const [minCorrectInput, setMinCorrectInput] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("http://localhost:3001/api/admin/settings")
+      .then((r) => r.json() as Promise<Record<string, string>>)
+      .then((data) => {
+        const mq = parseInt(data.minQuestions ?? "3", 10);
+        setMinQuestions(mq);
+        setMinQInput(String(mq));
+        const mc = parseInt(data.minCorrectAnswers ?? "0", 10);
+        setMinCorrect(mc);
+        setMinCorrectInput(String(mc));
+      })
+      .catch(() => setLoadError("Could not load settings."));
+  }, []);
+
+  async function handleSave() {
+    const mq = parseInt(minQInput, 10);
+    const mc = parseInt(minCorrectInput, 10);
+    if (isNaN(mq) || mq < 1 || mq > 20) return;
+    if (isNaN(mc) || mc < 0 || mc > 20) return;
+    setSaving(true);
+    setSaved(false);
+    await Promise.all([
+      fetch("http://localhost:3001/api/admin/settings/minQuestions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: String(mq) }),
+      }),
+      fetch("http://localhost:3001/api/admin/settings/minCorrectAnswers", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ value: String(mc) }),
+      }),
+    ]);
+    setMinQuestions(mq);
+    setMinCorrect(mc);
+    setSaving(false);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }
+
+  if (loadError) {
+    return <p className="text-sm text-red-400">{loadError}</p>;
+  }
+
+  if (minQuestions === null || minCorrect === null) {
+    return <p className="text-sm text-[var(--text)] animate-pulse">Loading settings…</p>;
+  }
+
+  const parsedMQ = parseInt(minQInput, 10);
+  const parsedMC = parseInt(minCorrectInput, 10);
+  const isMQValid = !isNaN(parsedMQ) && parsedMQ >= 1 && parsedMQ <= 20;
+  const isMCValid = !isNaN(parsedMC) && parsedMC >= 0 && parsedMC <= 20;
+  const isValid = isMQValid && isMCValid;
+  const isDirty = parsedMQ !== minQuestions || parsedMC !== minCorrect;
+
+  return (
+    <div className="max-w-lg space-y-6">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-6 space-y-6">
+        <div>
+          <h2 className="text-base font-semibold text-[var(--text-h)]">Session Requirements</h2>
+          <p className="text-sm text-[var(--text)] mt-0.5">Configure how sessions are scored and saved.</p>
+        </div>
+
+        {/* Min questions */}
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-[var(--text-h)]">
+            Minimum questions to save a session
+          </label>
+          <p className="text-xs text-[var(--text)]">
+            A session won't be saved unless the student answers at least this many questions. Sessions with a score of 0 are always discarded.
+          </p>
+          <div className="flex items-center gap-3 mt-2">
+            <input
+              type="number"
+              min={1}
+              max={20}
+              value={minQInput}
+              onChange={(e) => { setSaved(false); setMinQInput(e.target.value); }}
+              className={[
+                "w-24 rounded-lg border-2 px-3 py-2 text-sm font-semibold bg-[var(--code-bg)] text-[var(--text-h)]",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                isMQValid ? "border-[var(--border)]" : "border-red-500/60",
+              ].join(" ")}
+            />
+            <span className="text-sm text-[var(--text)]">questions (1–20)</span>
+          </div>
+          {!isMQValid && minQInput !== "" && (
+            <p className="text-xs text-red-400">Enter a number between 1 and 20.</p>
+          )}
+        </div>
+
+        {/* Min correct answers */}
+        <div className="space-y-2 border-t border-[var(--border)] pt-5">
+          <label className="text-sm font-medium text-[var(--text-h)]">
+            Minimum correct answers to save a session
+          </label>
+          <p className="text-xs text-[var(--text)]">
+            The student must answer at least this many questions correctly for the session to be saved. Partial credit counts proportionally (e.g. a half-correct answer = 0.5). Set to 0 to disable this gate.
+          </p>
+          <div className="flex items-center gap-3 mt-2">
+            <input
+              type="number"
+              min={0}
+              max={20}
+              value={minCorrectInput}
+              onChange={(e) => { setSaved(false); setMinCorrectInput(e.target.value); }}
+              className={[
+                "w-24 rounded-lg border-2 px-3 py-2 text-sm font-semibold bg-[var(--code-bg)] text-[var(--text-h)]",
+                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                isMCValid ? "border-[var(--border)]" : "border-red-500/60",
+              ].join(" ")}
+            />
+            <span className="text-sm text-[var(--text)]">correct (0–20)</span>
+          </div>
+          {!isMCValid && minCorrectInput !== "" && (
+            <p className="text-xs text-red-400">Enter a number between 0 and 20.</p>
+          )}
+        </div>
+
+        <button
+          onClick={() => void handleSave()}
+          disabled={saving || !isValid || !isDirty}
+          className={[
+            "px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-150",
+            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+            saving || !isValid || !isDirty
+              ? "bg-[var(--border)] text-[var(--text)] cursor-not-allowed"
+              : "bg-[var(--accent)] text-white hover:opacity-90",
+          ].join(" ")}
+        >
+          {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 export default function Admin() {
+  const { token } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [users, setUsers] = useState<User[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -1070,6 +1434,12 @@ export default function Admin() {
       )}
       {activeTab === "roster" && (
         <RosterTab users={users} assessments={assessments} onUsersChange={() => void fetchAll()} />
+      )}
+      {activeTab === "access" && (
+        <AccessTab token={token} />
+      )}
+      {activeTab === "settings" && (
+        <SettingsTab />
       )}
     </main>
   );

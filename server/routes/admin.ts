@@ -2,8 +2,13 @@ import { Hono } from "hono";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { db } from "../../db/index.ts";
-import { assessments, users, topics } from "../../db/schema.ts";
+import { assessments, users, topics, settings } from "../../db/schema.ts";
 import { eq, desc } from "drizzle-orm";
+
+const DEFAULTS: Record<string, string> = {
+  minQuestions: "3",
+  minCorrectAnswers: "0",
+};
 
 const app = new Hono();
 
@@ -93,6 +98,61 @@ Respond with valid JSON only, no markdown fences:
     console.error("member-summary error:", err);
     return c.json({ summary: "Could not reach AI. Check ANTHROPIC_API_KEY.", score: null }, 500);
   }
+});
+
+// GET /api/admin/settings — return all settings (falling back to defaults)
+app.get("/settings", async (c) => {
+  const rows = await db.select().from(settings);
+  const merged: Record<string, string> = { ...DEFAULTS };
+  for (const row of rows) merged[row.key] = row.value;
+  return c.json(merged);
+});
+
+// PUT /api/admin/settings/:key — upsert a single setting
+app.put("/settings/:key", async (c) => {
+  const key = c.req.param("key");
+  const { value } = await c.req.json<{ value: string }>();
+  if (!(key in DEFAULTS)) return c.json({ error: "Unknown setting key" }, 400);
+  await db
+    .insert(settings)
+    .values({ key, value: String(value) })
+    .onConflictDoUpdate({ target: settings.key, set: { value: String(value) } });
+  return c.json({ key, value: String(value) });
+});
+
+// ── User access management ────────────────────────────────────────────────────
+
+// GET /api/admin/pending-users
+app.get("/pending-users", async (c) => {
+  const pending = await db.select().from(users).where(eq(users.status, "pending"));
+  return c.json(pending);
+});
+
+// GET /api/admin/all-users
+app.get("/all-users", async (c) => {
+  const all = await db.select().from(users);
+  return c.json(all);
+});
+
+// POST /api/admin/users/:id/approve
+app.post("/users/:id/approve", async (c) => {
+  const id = Number(c.req.param("id"));
+  await db.update(users).set({ status: "approved" }).where(eq(users.id, id));
+  return c.json({ ok: true });
+});
+
+// POST /api/admin/users/:id/reject
+app.post("/users/:id/reject", async (c) => {
+  const id = Number(c.req.param("id"));
+  await db.update(users).set({ status: "rejected" }).where(eq(users.id, id));
+  return c.json({ ok: true });
+});
+
+// POST /api/admin/users/:id/remove
+app.post("/users/:id/remove", async (c) => {
+  const id = Number(c.req.param("id"));
+  await db.delete(users).where(eq(users.id, id));
+  return c.json({ ok: true });
 });
 
 export default app;
