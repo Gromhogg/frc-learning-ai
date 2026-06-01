@@ -1,0 +1,63 @@
+CAD WITH ONSHAPE
+Mentor Knowledge Guide — FIRST Robotics Team
+
+WHAT IS ONSHAPE
+Onshape is a cloud-based CAD (Computer-Aided Design) platform. Everything is stored online — no files to lose, no installs required, and every team member works in the same document simultaneously. For robotics, this means students in the shop and students at home can collaborate on the same assembly in real time. Onshape is free for public documents (FIRST teams qualify for an education license for private documents).
+
+ONSHAPE STRUCTURE
+Document: The top-level container. A team typically has one or a few documents per robot.
+Part Studio: Where you create 3D geometry. Multiple parts can coexist in one Part Studio and reference each other.
+Assembly: Where you bring parts together, define mates, and verify fit. This is what the physical robot looks like.
+Drawing: 2D views and dimensions for manufacturing. Generate drawings from Part Studios or Assemblies.
+Version / History: Every change is auto-saved. You can branch, merge, and restore any prior state.
+
+SKETCHING — THE FOUNDATION
+All Onshape geometry starts with a sketch on a plane or flat face. Key rules:
+- Fully constrain every sketch. Onshape shows unconstrained geometry in blue; constrained geometry in black. Undersconstrained parts will move when you don't expect them to.
+- Use dimensions (D key) and constraints (coincident, parallel, perpendicular, equal, symmetric) rather than eyeballing.
+- Reference existing geometry using the "Use" tool to tie sketch elements to existing edges — this creates parametric links so the sketch updates when the part changes.
+- Name your sketches descriptively (e.g., "Base plate profile" not "Sketch 1").
+
+CORE FEATURES
+Extrude: Turn a sketch into 3D solid. Choose Add (new material), Remove (cut), or Intersect. Set depth as a specific value or "Up to face/vertex" to create parametric references.
+Revolve: Rotate a profile around an axis to make cylindrical parts (shafts, wheels, hubs).
+Loft: Blend between two profiles. Used for complex transitions.
+Shell: Hollow out a solid part, leaving a specified wall thickness.
+Fillet / Chamfer: Round or bevel edges. Add fillets after all cuts are done to avoid feature failures.
+Mirror / Circular Pattern / Linear Pattern: Repeat features. Use these instead of manually modeling symmetric geometry — if the design changes, all instances update.
+Boolean (Add/Subtract/Intersect): Combine or subtract one solid from another in the same Part Studio.
+
+ASSEMBLIES AND MATES
+Mates define how parts move relative to each other. Common mates:
+Fastened: Parts are rigidly fixed. Use for anything bolted or welded in place.
+Revolute: Allows rotation around one axis. Use for pivots, hinges, and rotating joints.
+Slider: Allows linear translation along one axis. Use for telescoping or sliding mechanisms.
+Cylindrical: Allows both rotation and translation along one axis.
+Ball: 3-degree-of-freedom socket joint.
+Planar: Two faces stay coplanar while sliding in 2D.
+
+Mate connectors: When you create a mate, Onshape asks you to select mate connectors (points/axes) on each part. Pre-define mate connectors on parts in the Part Studio at logical assembly points (bolt holes, pivot centers) so mates snap in quickly.
+
+CONFIGURATIONS
+Configurations let one part have multiple variants (different lengths, hole patterns, etc.) without duplicating the Part Studio. Right-click a dimension or suppress/unsuppress a feature to add it to a configuration table. Useful for standard hardware (bolts in different lengths) or tubes in different lengths.
+
+FEATURESCRIPT
+Onshape supports custom features written in FeatureScript. The community has published hundreds of useful features available in the public FeatureScript library, including:
+- Tube converter (add tube wall thickness automatically)
+- Gear generator
+- Bearing hole (pre-defined diameter for press or slip fit)
+- Rivets and standoffs
+Add these to your account from the Onshape App Store or by searching public FeatureScript documents.
+
+ROBOTICS-SPECIFIC BEST PRACTICES
+Top-down design: Model the overall robot layout (bumper box, drivetrain wheelbase, game-piece path) in one Part Studio first, then create individual mechanisms referencing that layout. This keeps everything coordinated as the design evolves.
+Master sketch: Create a single "master sketch" with all critical dimensions (frame dimensions, game piece size, critical heights) and reference it from sub-assemblies.
+COTS (Commercial Off The Shelf) parts: Import vendor CAD from McMaster-Carr, REV Robotics, WCP, or AndyMark directly into Onshape using Insert > From URL or import STEP files. Keep COTS parts in a dedicated "Hardware" Part Studio or shared document.
+Naming conventions: Name every part clearly (e.g., "Left Elevator Carriage Plate" not "Part 1"). Name mates, too. Good names make Assembly trees readable.
+Versions and branches: Tag a version before major changes ("Before elevator redesign"). Branch if two students are working on competing designs and you want to compare later.
+
+DRAWINGS FOR MANUFACTURING
+Create a drawing from a Part Studio to send to the waterjet or CNC. Set the drawing sheet size and scale. Add standard views (front, top, right, isometric). Dimension all features that matter for manufacturing. Export as PDF for laser/waterjet files or DXF for the CNC router. For CNC, export sketch profiles directly as DXF using right-click on the sketch.
+
+COLLABORATION TIPS
+Invite team members to the document and assign them Editor or Commenter roles. Use comments (C key in Assembly) to flag issues for design reviews. The version graph shows who changed what and when — use it to understand the design history before making changes to someone else's work.

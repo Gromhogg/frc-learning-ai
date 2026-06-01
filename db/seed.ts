@@ -28,12 +28,42 @@ async function seed() {
     {
       name: "Mill Operation",
       slug: "mill-operation",
-      filePath: "knowledge/mill-operation.txt",
+      filePath: "knowledge/mill-operation/mill-operation.txt",
     },
     {
       name: "Lathe Operation",
       slug: "lathe-operation",
-      filePath: "knowledge/lathe-operation.txt",
+      filePath: "knowledge/lathe-operation/lathe-operation.txt",
+    },
+    {
+      name: "CNC Mill",
+      slug: "cnc-mill",
+      filePath: "knowledge/cnc-mill/cnc-mill.txt",
+    },
+    {
+      name: "CNC Router",
+      slug: "cnc-router",
+      filePath: "knowledge/cnc-router/cnc-router.txt",
+    },
+    {
+      name: "Waterjet",
+      slug: "waterjet",
+      filePath: "knowledge/waterjet/waterjet.txt",
+    },
+    {
+      name: "CAD (Onshape)",
+      slug: "cad-onshape",
+      filePath: "knowledge/cad-onshape/cad-onshape.txt",
+    },
+    {
+      name: "CAM",
+      slug: "cam",
+      filePath: "knowledge/cam/cam.txt",
+    },
+    {
+      name: "Assembly",
+      slug: "assembly",
+      filePath: "knowledge/assembly/assembly.txt",
     },
   ];
 

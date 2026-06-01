@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import TopicPicker from "../components/topic-picker";
 import { useAuth } from "../context/AuthContext";
@@ -12,13 +12,21 @@ interface Topic {
 
 export default function Home() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const [topics, setTopics] = useState<Topic[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selectedTopic, setSelectedTopic] = useState<Topic | null>(null);
   const [search, setSearch] = useState("");
+
+  const filteredTopics = useMemo(() => {
+    const q = search.toLowerCase();
+    if (!q) return topics;
+    return topics.filter(
+      (t) => t.name.toLowerCase().includes(q) || t.slug.toLowerCase().includes(q)
+    );
+  }, [topics, search]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +93,7 @@ export default function Home() {
         <header className="mb-12 text-center">
           <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-bg)] text-xs font-semibold tracking-widest uppercase text-[var(--accent)]">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
-            <span>Robotics Team</span>
+            <span>972 Iron Claw</span>
           </div>
           <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-[var(--text-h)] mb-3">
             FRC Team Knowledge<br className="hidden sm:block" /> Assessment
@@ -122,33 +130,12 @@ export default function Home() {
           </div>
 
           <TopicPicker
-            topics={topics.filter((t) =>
-              t.name.toLowerCase().includes(search.toLowerCase()) ||
-              t.slug.toLowerCase().includes(search.toLowerCase())
-            )}
+            topics={filteredTopics}
             selectedTopicId={selectedTopic?.id ?? null}
             onSelect={handleTopicSelect}
           />
         </section>
 
-        {/* ── Footer ── */}
-        <div className="mt-12 pt-8 border-t border-[var(--border)] flex items-center justify-between">
-          <a
-            href="/results"
-            className="inline-flex items-center gap-2 text-sm text-[var(--text)] hover:text-[var(--accent)] transition-colors duration-150"
-          >
-            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-            View Assessment Results
-          </a>
-          <button
-            onClick={() => { logout(); navigate("/login"); }}
-            className="text-sm text-[var(--text)] opacity-50 hover:opacity-100 hover:text-red-400 transition-all"
-          >
-            Sign out
-          </button>
-        </div>
 
       </div>
     </main>

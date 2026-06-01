@@ -1,16 +1,22 @@
 import { useState } from 'react';
 
+export interface QuizAnswer {
+  selectedIndex: number;
+  correct: boolean;
+}
+
 export interface QuizWidgetProps {
   question: string;
   options: string[];
   correctIndex: number;
-  onAnswer?: (selectedIndex: number, correct: boolean) => void;
+  answer?: QuizAnswer;
+  onAnswer?: (answer: QuizAnswer) => void;
 }
 
 const LABELS = ['A', 'B', 'C', 'D', 'E', 'F'];
 
-export default function QuizWidget({ question, options, correctIndex, onAnswer }: QuizWidgetProps) {
-  const [selected, setSelected] = useState<number | null>(null);
+export default function QuizWidget({ question, options, correctIndex, answer, onAnswer }: QuizWidgetProps) {
+  const [selected, setSelected] = useState<number | null>(answer?.selectedIndex ?? null);
 
   const answered = selected !== null;
 
@@ -18,7 +24,7 @@ export default function QuizWidget({ question, options, correctIndex, onAnswer }
     if (answered) return;
     setSelected(index);
     const correct = index === correctIndex;
-    onAnswer?.(index, correct);
+    onAnswer?.({ selectedIndex: index, correct });
   }
 
   function getOptionStyle(index: number): string {

@@ -20,6 +20,7 @@
     "@hono/node-server": "^1.19.13",
     "ai": "^6.0.158",
     "arctic": "^3.7.0",
+    "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.8.0",
     "dotenv": "^17.4.2",
     "drizzle-orm": "^0.45.2",
@@ -32,6 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@tailwindcss/vite": "^4.2.2",
+    "@types/bcryptjs": "^2.4.6",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^24.12.2",
     "@types/react": "^19.2.14",

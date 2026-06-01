@@ -37,34 +37,23 @@ interface ContentBlock {
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function scoreColor(score: number): string {
-  if (score >= 80) return "text-emerald-600 dark:text-emerald-400";
-  if (score >= 60) return "text-yellow-600 dark:text-yellow-400";
-  return "text-red-500 dark:text-red-400";
+  if (score >= 80) return "text-emerald-400";
+  if (score >= 60) return "text-yellow-400";
+  return "text-red-400";
 }
 
 function scoreBadgeBg(score: number): string {
-  if (score >= 80)
-    return "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300";
-  if (score >= 60)
-    return "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300";
-  return "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300";
+  if (score >= 80) return "bg-emerald-900/40 text-emerald-300";
+  if (score >= 60) return "bg-yellow-900/40 text-yellow-300";
+  return "bg-red-900/40 text-red-400";
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+function formatDate(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+function formatTime(d: Date): string {
+  return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 }
 
 // ── Chat log parsing ─────────────────────────────────────────────────────────
@@ -242,6 +231,7 @@ interface AssessmentRowProps {
 }
 
 function AssessmentRow({ assessment, expanded, onToggle }: AssessmentRowProps) {
+  const date = new Date(assessment.createdAt);
   return (
     <div className="border border-[var(--border)] rounded-xl overflow-hidden">
       {/* Row header — clickable */}
@@ -292,8 +282,8 @@ function AssessmentRow({ assessment, expanded, onToggle }: AssessmentRowProps) {
 
           {/* Date/time */}
           <span className="flex-shrink-0 text-xs text-[var(--text)] text-right leading-tight">
-            <span className="block">{formatDate(assessment.createdAt)}</span>
-            <span className="block opacity-70">{formatTime(assessment.createdAt)}</span>
+            <span className="block">{formatDate(date)}</span>
+            <span className="block opacity-70">{formatTime(date)}</span>
           </span>
         </button>
       </div>
@@ -370,9 +360,7 @@ export default function Results() {
 
   // ── Derived data ───────────────────────────────────────────────────────────
 
-  const uniqueTopics = Array.from(
-    new Map(assessments.map((a) => [a.topicName, a.topicName])).values()
-  ).sort();
+  const uniqueTopics = [...new Set(assessments.map((a) => a.topicName))].sort();
 
   const filtered = assessments.filter((a) => {
     if (filterUserId && String(a.userId) !== filterUserId) return false;
@@ -426,7 +414,7 @@ export default function Results() {
         <div>
           <div className="inline-flex items-center gap-2 mb-2 px-3 py-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-bg)] text-xs font-semibold tracking-widest uppercase text-[var(--accent)]">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg>
-            <span>Robotics Team</span>
+            <span>972 Iron Claw</span>
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-[var(--text-h)] m-0">
             Assessment Results

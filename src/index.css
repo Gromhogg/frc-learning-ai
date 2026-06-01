@@ -2,16 +2,16 @@
 
 /* ── Design tokens — dark-first ───────────────────────────────────────────── */
 :root {
-  --text:           #94a3b8; /* slate-400 */
-  --text-h:         #f1f5f9; /* slate-100 */
-  --bg:             #0f172a; /* slate-900 */
-  --card-bg:        #1e293b; /* slate-800 */
-  --border:         #334155; /* slate-700 */
-  --code-bg:        #1e293b; /* slate-800 */
-  --accent:         #6366f1; /* indigo-500 */
-  --accent-hover:   #818cf8; /* indigo-400 */
-  --accent-bg:      rgba(99, 102, 241, 0.12);
-  --accent-border:  rgba(99, 102, 241, 0.45);
+  --text:           #a3a3a3; /* neutral-400 */
+  --text-h:         #f5f5f5; /* neutral-100 */
+  --bg:             #0a0a0a; /* near-black */
+  --card-bg:        #171717; /* neutral-900 */
+  --border:         #2a2a2a; /* neutral-800 */
+  --code-bg:        #171717; /* neutral-900 */
+  --accent:         #f97316; /* orange-500 */
+  --accent-hover:   #fb923c; /* orange-400 */
+  --accent-bg:      rgba(249, 115, 22, 0.12);
+  --accent-border:  rgba(249, 115, 22, 0.45);
   --shadow:
     rgba(0, 0, 0, 0.45) 0 10px 15px -3px,
     rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
@@ -82,4 +82,4 @@ select {
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #475569; }
+::-webkit-scrollbar-thumb:hover { background: #404040; }

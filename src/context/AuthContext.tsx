@@ -5,7 +5,7 @@ export interface AuthUser {
   name: string;
   email: string;
   avatarUrl?: string | null;
-  role: "student" | "admin";
+  role: "student" | "admin" | "manager";
   status: "pending" | "approved" | "rejected";
 }
 

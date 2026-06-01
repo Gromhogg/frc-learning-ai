@@ -26,3 +26,7 @@ dist-ssr
 # Environment variables
 .env
 data/
+
+# Local SQLite databases (the live DB lives under data/; this catches stray copies)
+db/*.sqlite
+db/*.sqlite-journal

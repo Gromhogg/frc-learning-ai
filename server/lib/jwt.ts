@@ -6,7 +6,7 @@ const secret = new TextEncoder().encode(
 
 export interface SessionPayload {
   userId: number;
-  role: "student" | "admin";
+  role: "student" | "admin" | "manager";
   status: "pending" | "approved" | "rejected";
 }
 
@@ -23,7 +23,7 @@ export async function verifyToken(token: string): Promise<SessionPayload | null>
     const { payload } = await jwtVerify(token, secret);
     return {
       userId: payload.userId as number,
-      role: payload.role as "student" | "admin",
+      role: payload.role as "student" | "admin" | "manager",
       status: payload.status as "pending" | "approved" | "rejected",
     };
   } catch {

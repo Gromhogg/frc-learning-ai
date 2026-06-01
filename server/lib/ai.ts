@@ -1,13 +1,69 @@
+export interface CoveredTopic {
+  topicName: string;
+  score: number;
+  completedAt: string;
+  isCurrentTopic: boolean;
+}
+
 /**
  * Builds the system prompt for a robotics-team knowledge assessment session.
  * @param topicName - Human-readable name of the topic (from DB).
  * @param knowledgeContent - Full text of the knowledge-base file for this topic.
+ * @param coverage - Topics this user has already been assessed on.
+ * @param studentName - The student's first name (or full name) for personalisation.
  */
-export function buildSystemPrompt(topicName: string, knowledgeContent: string): string {
+export function buildSystemPrompt(
+  topicName: string,
+  knowledgeContent: string,
+  coverage: CoveredTopic[] = [],
+  studentName?: string,
+): string {
+  const priorTopics = coverage.filter((c) => !c.isCurrentTopic);
+  const repeatSessions = coverage.filter((c) => c.isCurrentTopic);
+
+  // Pick a short first-name-ish form for natural address ("Hey Charlie" not "Hey Charles Sweetland")
+  const trimmedName = (studentName ?? '').trim();
+  const firstName = trimmedName.split(/\s+/)[0] || '';
+  const allScores = coverage.map((c) => c.score).filter((s): s is number => typeof s === 'number');
+  const avg = allScores.length > 0
+    ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length)
+    : null;
+
+  // ── Personalisation block ───────────────────────────────────────────────
+  let personalSection = '';
+  if (firstName) {
+    personalSection = `\n━━━ STUDENT ━━━\nThe student's name is ${firstName}. Address them by name once or twice naturally during the session (not every message).\n`;
+    if (avg !== null) {
+      let cue: string;
+      if (avg >= 85) cue = 'They have a strong track record (avg ' + avg + '%). Push them with harder, applied, or edge-case questions; do not waste time on basics.';
+      else if (avg >= 65) cue = 'They are mid-range (avg ' + avg + '%). Calibrate to solid intermediate questions; probe gently on weak spots.';
+      else cue = 'They have struggled in past sessions (avg ' + avg + '%). Start with fundamentals, keep encouragement warm but honest, and only escalate difficulty once they show confidence.';
+      personalSection += cue + '\n';
+    }
+  }
+
+  let coverageSection = '';
+  if (priorTopics.length > 0 || repeatSessions.length > 0) {
+    coverageSection = '\n━━━ STUDENT COVERAGE HISTORY ━━━\n';
+    if (priorTopics.length > 0) {
+      coverageSection += 'This student has already been assessed on these other topics:\n';
+      for (const t of priorTopics) {
+        coverageSection += `  • ${t.topicName} — scored ${t.score}% (${t.completedAt})\n`;
+      }
+      coverageSection += 'You may reference or build upon this prior knowledge during today\'s session.\n';
+    }
+    if (repeatSessions.length > 0) {
+      const latest = repeatSessions[repeatSessions.length - 1];
+      coverageSection += `This student has been assessed on THIS topic before (most recent score: ${latest.score}%). `;
+      coverageSection += 'Ask DIFFERENT questions than in previous sessions — vary scenarios, widget types, and specific details tested.\n';
+    }
+    coverageSection += '\n';
+  }
+
   return `You are a robotics team mentor running a quick knowledge check on a student.
 
 Topic: ${topicName}
-
+${personalSection}${coverageSection}
 Knowledge Base:
 ${knowledgeContent}
 

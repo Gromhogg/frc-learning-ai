@@ -13,8 +13,6 @@ import AskPanel from "./components/ask-panel";
 import { ModeProvider, useModeContext } from "./context/ModeContext";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 
-interface DevUser { id: number; name: string; }
-
 // ── Route guards ──────────────────────────────────────────────────────────────
 
 function RequireAuth({ children }: { children: ReactNode }) {
@@ -22,6 +20,7 @@ function RequireAuth({ children }: { children: ReactNode }) {
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
   if (user.status === "pending" || user.status === "rejected") return <Navigate to="/pending" replace />;
+  if (user.role === "admin" || user.role === "manager") return <Navigate to="/admin" replace />;
   return <>{children}</>;
 }
 
@@ -29,20 +28,48 @@ function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return null;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "admin") return <Navigate to="/" replace />;
+  if (user.role !== "admin" && user.role !== "manager") return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
 // ── Hamburger menu ────────────────────────────────────────────────────────────
 
+const NAV_ITEMS = [
+  {
+    label: "Topics",
+    path: "/topics",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+      </svg>
+    ),
+  },
+  {
+    label: "My Results",
+    path: "/results",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+    ),
+  },
+  {
+    label: "New Assessment",
+    path: "/",
+    icon: (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+    ),
+  },
+];
+
 function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
-  const { user, logout, setSession } = useAuth();
+  const { user, logout } = useAuth();
   const { isAdmin, setIsAdmin } = useModeContext();
   const navigate = useNavigate();
   const location = useLocation();
   const [open, setOpen] = useState(false);
-  const [devOpen, setDevOpen] = useState(false);
-  const [devUsers, setDevUsers] = useState<DevUser[]>([]);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,89 +83,26 @@ function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, [open]);
 
-  // Fetch student list when dev mode submenu opens
-  useEffect(() => {
-    if (!devOpen) return;
-    fetch("http://localhost:3001/api/users")
-      .then((r) => r.json() as Promise<DevUser[]>)
-      .then(setDevUsers)
-      .catch(() => {});
-  }, [devOpen]);
-
   const hidden = location.pathname === "/chat";
   if (hidden) return null;
 
   function go(path: string) {
     navigate(path);
     setOpen(false);
-    setDevOpen(false);
   }
 
   function goAdmin() {
     setIsAdmin(true);
-    // Dev-mode admin: grant admin role via a legacy session for testing
-    setSession("legacy", {
-      id: 0,
-      name: "Dev Admin",
-      email: "",
-      role: "admin",
-      status: "approved",
-    });
     navigate("/admin");
     setOpen(false);
-    setDevOpen(false);
-  }
-
-  function goStudent(u: DevUser) {
-    setIsAdmin(false);
-    setSession("legacy", {
-      id: u.id,
-      name: u.name,
-      email: "",
-      role: "student",
-      status: "approved",
-    });
-    navigate("/");
-    setOpen(false);
-    setDevOpen(false);
   }
 
   function handleLogout() {
     logout();
     navigate("/login");
     setOpen(false);
-    setDevOpen(false);
   }
 
-  const navItems = [
-    {
-      label: "Topics",
-      path: "/topics",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-        </svg>
-      ),
-    },
-    {
-      label: "My Results",
-      path: "/results",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
-        </svg>
-      ),
-    },
-    {
-      label: "New Assessment",
-      path: "/",
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-          <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
-        </svg>
-      ),
-    },
-  ];
 
   return (
     <div ref={menuRef} className="fixed top-4 left-4 z-50">
@@ -171,8 +135,10 @@ function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
               )}
               <div className="flex flex-col min-w-0">
                 <span className="text-sm font-semibold text-[var(--text-h)] truncate">{user.name}</span>
-                {user.role === "admin" && (
-                  <span className="text-[10px] text-[var(--accent)] font-semibold uppercase tracking-wide">Admin</span>
+                {(user.role === "admin" || user.role === "manager") && (
+                  <span className="text-[10px] text-[var(--accent)] font-semibold uppercase tracking-wide">
+                    {user.id === 0 ? "Developer" : user.role === "manager" ? "Manager" : "Admin"}
+                  </span>
                 )}
               </div>
             </div>
@@ -181,7 +147,7 @@ function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
           {/* Nav links */}
           {user && (
             <nav className="py-1">
-              {navItems.map((item) => (
+              {NAV_ITEMS.map((item) => (
                 <button
                   key={item.label}
                   onClick={() => go(item.path)}
@@ -209,8 +175,8 @@ function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
                 Ask AI
               </button>
 
-              {/* Admin panel link — only for admins */}
-              {user.role === "admin" && (
+              {/* Admin panel link — for admins and managers */}
+              {(user.role === "admin" || user.role === "manager") && (
                 <button
                   onClick={goAdmin}
                   className={[
@@ -230,72 +196,6 @@ function HamburgerMenu({ onOpenAsk }: { onOpenAsk: () => void }) {
               )}
             </nav>
           )}
-
-          {/* Dev Mode — expandable submenu (works without login too) */}
-          <div className="border-t border-[var(--border)]">
-            <button
-              onClick={() => setDevOpen((v) => !v)}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-left text-[var(--text-h)] hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] transition-colors duration-100"
-            >
-              <span className="opacity-70">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14" />
-                </svg>
-              </span>
-              Dev Mode
-              <svg
-                viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"
-                width="12" height="12"
-                className={`ml-auto opacity-60 transition-transform ${devOpen ? 'rotate-180' : ''}`}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </button>
-
-            {devOpen && (
-              <div className="bg-[var(--bg)] border-t border-[var(--border)] py-1">
-                {/* Admin */}
-                <button
-                  onClick={goAdmin}
-                  className={[
-                    "w-full flex items-center gap-2 pl-8 pr-4 py-2 text-xs font-semibold text-left transition-colors",
-                    isAdmin
-                      ? "text-[var(--accent)] bg-[var(--accent-bg)]"
-                      : "text-[var(--text-h)] hover:bg-[var(--accent-bg)] hover:text-[var(--accent)]",
-                  ].join(" ")}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  </svg>
-                  Admin
-                  {isAdmin && <span className="ml-auto text-[10px] opacity-60">active</span>}
-                </button>
-
-                {/* Students */}
-                {devUsers.length > 0 && (
-                  <>
-                    <p className="pl-8 pr-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-widest text-[var(--text)] opacity-50">
-                      Students
-                    </p>
-                    {devUsers.map((u) => (
-                      <button
-                        key={u.id}
-                        onClick={() => goStudent(u)}
-                        className="w-full flex items-center gap-2 pl-8 pr-4 py-1.5 text-xs text-[var(--text-h)] text-left hover:bg-[var(--accent-bg)] hover:text-[var(--accent)] transition-colors"
-                      >
-                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                          <circle cx="12" cy="7" r="4" />
-                        </svg>
-                        {u.name}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            )}
-          </div>
 
           {/* Sign out */}
           {user && (
@@ -329,7 +229,7 @@ function AppLayout() {
   }, [askHidden, askOpen]);
 
   return (
-    <div className="min-h-screen bg-[#0f172a] text-[var(--text)] flex flex-col">
+    <div className="min-h-screen bg-[var(--bg)] text-[var(--text)] flex flex-col">
       <HamburgerMenu onOpenAsk={() => setAskOpen(true)} />
       {!askHidden && <AskPanel open={askOpen} onClose={() => setAskOpen(false)} />}
       <Outlet />

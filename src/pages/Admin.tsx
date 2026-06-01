@@ -1,5 +1,11 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
+import QuizWidget, { type QuizWidgetProps, type QuizAnswer } from "../components/quiz-widget";
+import ChecklistWidget, { type ChecklistWidgetProps } from "../components/checklist-widget";
+import DragOrderWidget, { type DragOrderWidgetProps, type DragOrderAnswer } from "../components/drag-order-widget";
+import ScenarioWidget, { type ScenarioWidgetProps, type ScenarioAnswer } from "../components/scenario-widget";
+import CodeRunnerWidget, { type CodeRunnerWidgetProps, type CodeRunnerAnswer } from "../components/code-runner-widget";
+import LabeledDiagramWidget, { type LabeledDiagramWidgetProps } from "../components/labeled-diagram-widget";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -7,6 +13,7 @@ interface User {
   id: number;
   name: string;
   createdAt: string | null;
+  hasPassword?: number; // 1 when password_hash is set, 0 otherwise
 }
 
 interface Topic {
@@ -51,9 +58,13 @@ function formatDate(iso: string): string {
 
 // ── Chat log parsing (for member deep-dive) ───────────────────────────────────
 
+interface TextPart { kind: "text"; text: string }
+interface WidgetPart { kind: "widget"; toolName: string; args: Record<string, unknown>; answer: unknown }
+type MsgPart = TextPart | WidgetPart;
+
 interface ParsedMessage {
   role: "user" | "assistant";
-  parts: string[];
+  parts: MsgPart[];
 }
 
 function parseChatLog(raw: string): ParsedMessage[] {
@@ -69,26 +80,35 @@ function parseChatLog(raw: string): ParsedMessage[] {
   for (const msg of messages) {
     if (!msg.role) continue;
     const role = msg.role as "user" | "assistant";
-    const parts: string[] = [];
+    const parts: MsgPart[] = [];
 
     if (Array.isArray(msg.parts)) {
       for (const part of msg.parts as Record<string, unknown>[]) {
-        if (part.type === "text" && typeof part.text === "string" && (part.text as string).trim()) {
-          parts.push((part.text as string).trim());
-        } else if (part.type === "tool-invocation" || part.type === "tool") {
-          const input = (part.input ?? part.args) as Record<string, unknown> | undefined;
-          const toolName = String(part.toolName ?? part.name ?? "Tool");
-          if (input && "question" in input && typeof input.question === "string") {
-            parts.push(`[Quiz: ${input.question}]`);
-          } else if (input && "title" in input && typeof input.title === "string") {
-            parts.push(`[Checklist: ${input.title}]`);
-          } else {
-            parts.push(`[${toolName}]`);
+        const pType = typeof part.type === "string" ? part.type : "";
+        if (pType === "text" && typeof part.text === "string" && (part.text as string).trim()) {
+          parts.push({ kind: "text", text: (part.text as string).trim() });
+        } else if (pType.startsWith("tool-") && pType !== "tool-result") {
+          // AI SDK v5+: tool parts have type "tool-<toolName>", e.g. "tool-showQuiz"
+          const toolName = pType.slice("tool-".length);
+          const args = (part.input ?? part.args) as Record<string, unknown> | undefined;
+          const output = part.output as Record<string, unknown> | undefined;
+          const answer = output && typeof output === "object" ? output.answer : undefined;
+          if (args && toolName) {
+            parts.push({ kind: "widget", toolName, args, answer });
+          }
+        } else if ((pType === "tool-invocation" || pType === "tool") && part) {
+          // Legacy fallback for older logs
+          const args = (part.input ?? part.args) as Record<string, unknown> | undefined;
+          const toolName = String(part.toolName ?? part.name ?? "");
+          const output = part.output as Record<string, unknown> | undefined;
+          const answer = output && typeof output === "object" ? output.answer : undefined;
+          if (args && toolName) {
+            parts.push({ kind: "widget", toolName, args, answer });
           }
         }
       }
     } else if (typeof msg.content === "string" && (msg.content as string).trim()) {
-      parts.push((msg.content as string).trim());
+      parts.push({ kind: "text", text: (msg.content as string).trim() });
     }
 
     if (parts.length > 0) parsed.push({ role, parts });
@@ -111,20 +131,92 @@ function ChatLogView({ rawLog }: { rawLog: string }) {
               {isUser ? "Student" : "AI Tutor"}
             </span>
             {msg.parts.map((part, j) => {
-              const isTool = part.startsWith("[");
+              if (part.kind === "text") {
+                return (
+                  <div
+                    key={j}
+                    className={[
+                      "max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed text-left",
+                      isUser
+                        ? "bg-[var(--accent)] text-white"
+                        : "bg-[var(--card-bg)] text-[var(--text-h)]",
+                    ].join(" ")}
+                  >
+                    {part.text}
+                  </div>
+                );
+              }
+
+              // Widget parts — render the real component, pre-filled with the student's answer (read-only)
+              const { toolName, args, answer } = part;
+              if (toolName === "showQuiz") {
+                return (
+                  <QuizWidget
+                    key={j}
+                    question={args.question as QuizWidgetProps["question"]}
+                    options={args.options as QuizWidgetProps["options"]}
+                    correctIndex={args.correctIndex as QuizWidgetProps["correctIndex"]}
+                    answer={answer as QuizAnswer | undefined}
+                  />
+                );
+              }
+              if (toolName === "showChecklist") {
+                return (
+                  <ChecklistWidget
+                    key={j}
+                    title={args.title as ChecklistWidgetProps["title"]}
+                    items={args.items as ChecklistWidgetProps["items"]}
+                  />
+                );
+              }
+              if (toolName === "showDragOrder") {
+                return (
+                  <DragOrderWidget
+                    key={j}
+                    instruction={args.instruction as DragOrderWidgetProps["instruction"]}
+                    items={args.items as DragOrderWidgetProps["items"]}
+                    answer={answer as DragOrderAnswer | undefined}
+                  />
+                );
+              }
+              if (toolName === "showScenario") {
+                return (
+                  <ScenarioWidget
+                    key={j}
+                    title={args.title as ScenarioWidgetProps["title"]}
+                    scenario={args.scenario as ScenarioWidgetProps["scenario"]}
+                    steps={args.steps as ScenarioWidgetProps["steps"]}
+                    answer={answer as ScenarioAnswer | undefined}
+                  />
+                );
+              }
+              if (toolName === "showCodeRunner") {
+                return (
+                  <CodeRunnerWidget
+                    key={j}
+                    prompt={args.prompt as CodeRunnerWidgetProps["prompt"]}
+                    language={args.language as CodeRunnerWidgetProps["language"]}
+                    starterCode={args.starterCode as CodeRunnerWidgetProps["starterCode"]}
+                    expectedPatterns={args.expectedPatterns as CodeRunnerWidgetProps["expectedPatterns"]}
+                    solutionCode={args.solutionCode as CodeRunnerWidgetProps["solutionCode"]}
+                    answer={answer as CodeRunnerAnswer | undefined}
+                  />
+                );
+              }
+              if (toolName === "showLabeledDiagram") {
+                return (
+                  <LabeledDiagramWidget
+                    key={j}
+                    title={args.title as LabeledDiagramWidgetProps["title"]}
+                    description={args.description as LabeledDiagramWidgetProps["description"]}
+                    parts={args.parts as LabeledDiagramWidgetProps["parts"]}
+                  />
+                );
+              }
+              // Unknown tool — fallback label
               return (
-                <div
-                  key={j}
-                  className={[
-                    "max-w-[85%] rounded-xl px-3 py-2 text-sm leading-relaxed text-left",
-                    isTool
-                      ? "border border-[var(--accent-border)] bg-[var(--accent-bg)] text-[var(--accent)] font-medium font-mono text-xs"
-                      : isUser
-                      ? "bg-[var(--accent)] text-white"
-                      : "bg-[var(--card-bg)] text-[var(--text-h)]",
-                  ].join(" ")}
-                >
-                  {part}
+                <div key={j} className="text-xs text-[var(--accent)] font-mono bg-[var(--accent-bg)] border border-[var(--accent-border)] rounded-xl px-3 py-2">
+                  [{toolName}]
                 </div>
               );
             })}
@@ -203,34 +295,51 @@ function OverviewTab({
   assessments,
   onDeleteAssessment,
   onEditScore,
+  onClearHistory,
 }: {
   users: User[];
   topics: Topic[];
   assessments: Assessment[];
   onDeleteAssessment: (id: number) => Promise<void>;
   onEditScore: (id: number, score: number) => Promise<void>;
+  onClearHistory: (userId: number) => Promise<void>;
 }) {
   const [expandedMemberId, setExpandedMemberId] = useState<number | null>(null);
   const [expandedAssessmentId, setExpandedAssessmentId] = useState<number | null>(null);
   const [editingScoreId, setEditingScoreId] = useState<number | null>(null);
   const [editScoreValue, setEditScoreValue] = useState("");
+  const [confirmClearId, setConfirmClearId] = useState<number | null>(null);
+  const [clearingId, setClearingId] = useState<number | null>(null);
+
+  function commitScore(assessmentId: number) {
+    const v = Math.max(0, Math.min(100, parseInt(editScoreValue, 10)));
+    if (!isNaN(v)) void onEditScore(assessmentId, v).then(() => setEditingScoreId(null));
+  }
+
+  async function clearHistory(userId: number) {
+    setClearingId(userId);
+    setConfirmClearId(null);
+    await onClearHistory(userId);
+    setClearingId(null);
+    // Reset expanded state since there are no sessions left
+    setExpandedMemberId(null);
+  }
+
   const [summaries, setSummaries] = useState<Record<number, MemberSummary>>({});
   const hasFetchedRef = useRef(false);
 
-  // ── Generate AI summaries for all members ────────────────────────────────
+  // ── Generate AI narrative summaries for all members ──────────────────────
 
   const generateSummaries = useCallback(() => {
     if (users.length === 0) return;
     hasFetchedRef.current = true;
 
-    // Mark everyone as loading
     const initial: Record<number, MemberSummary> = {};
     for (const user of users) {
       initial[user.id] = { summary: "", score: null, loading: true };
     }
     setSummaries(initial);
 
-    // Fetch in parallel, update each as it resolves
     for (const user of users) {
       fetch("http://localhost:3001/api/admin/member-summary", {
         method: "POST",
@@ -263,25 +372,26 @@ function OverviewTab({
 
   const totalAssessments = assessments.length;
 
-  // Team avg uses AI scores where available, falls back to raw scores
-  const scoredMembers = users.filter((u) => {
-    const s = summaries[u.id];
-    return s && !s.loading && s.score !== null;
-  });
-  const teamAvg =
-    scoredMembers.length > 0
-      ? Math.round(scoredMembers.reduce((sum, u) => sum + (summaries[u.id].score ?? 0), 0) / scoredMembers.length)
-      : null;
+  // Objective member score: average of that member's stored assessment scores
+  function memberScore(userId: number): number | null {
+    const scores = assessments
+      .filter((a) => a.userId === userId)
+      .map((a) => a.score);
+    if (scores.length === 0) return null;
+    return Math.round(scores.reduce((s, n) => s + n, 0) / scores.length);
+  }
 
-  // Sort members: loaded with scores first (desc), then loading, then no assessments
+  // Team avg: average of all members who have at least one assessment
+  const membersWithScores = users.map((u) => memberScore(u.id)).filter((s): s is number => s !== null);
+  const teamAvg = membersWithScores.length > 0
+    ? Math.round(membersWithScores.reduce((a, b) => a + b, 0) / membersWithScores.length)
+    : null;
+
+  // Sort by score descending; unassessed members go to the end
   const sortedUsers = [...users].sort((a, b) => {
-    const sa = summaries[a.id];
-    const sb = summaries[b.id];
-    const scoreA = sa?.score ?? -1;
-    const scoreB = sb?.score ?? -1;
-    if (sa?.loading && !sb?.loading) return 1;
-    if (!sa?.loading && sb?.loading) return -1;
-    return scoreB - scoreA;
+    const sa = memberScore(a.id) ?? -1;
+    const sb = memberScore(b.id) ?? -1;
+    return sb - sa;
   });
 
   return (
@@ -339,6 +449,9 @@ function OverviewTab({
             {sortedUsers.map((user) => {
               const summary = summaries[user.id];
               const isExpanded = expandedMemberId === user.id;
+              const score = memberScore(user.id);
+              const isConfirmingClear = confirmClearId === user.id;
+              const isClearing = clearingId === user.id;
               const memberAssessments = assessments
                 .filter((a) => a.userId === user.id)
                 .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -353,6 +466,7 @@ function OverviewTab({
                         onClick={() => {
                           setExpandedMemberId(isExpanded ? null : user.id);
                           setExpandedAssessmentId(null);
+                          setConfirmClearId(null);
                         }}
                         className="flex items-center gap-2 flex-1 min-w-0 text-left focus:outline-none group"
                       >
@@ -366,25 +480,17 @@ function OverviewTab({
                         </span>
                       </button>
 
-                      {/* Score badge */}
-                      {summary?.loading ? (
-                        <span className="flex items-center gap-1.5 text-xs text-[var(--text)] opacity-50 flex-shrink-0">
-                          <svg className="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-                          </svg>
-                          Analysing…
+                      {/* Objective score badge — computed from stored assessment data */}
+                      {score !== null ? (
+                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${scoreBadgeBg(score)}`}>
+                          {score}%
                         </span>
-                      ) : summary?.score !== null && summary?.score !== undefined ? (
-                        <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full flex-shrink-0 ${scoreBadgeBg(summary.score)}`}>
-                          {summary.score}%
-                        </span>
-                      ) : memberAssessments.length === 0 ? (
+                      ) : (
                         <span className="text-xs text-[var(--text)] opacity-40 flex-shrink-0">Not assessed</span>
-                      ) : null}
+                      )}
                     </div>
 
-                    {/* AI summary text */}
+                    {/* AI narrative summary */}
                     <div className="ml-5 mt-1.5">
                       {summary?.loading ? (
                         <div className="h-3.5 w-3/4 rounded bg-[var(--border)] animate-pulse" />
@@ -396,10 +502,44 @@ function OverviewTab({
                     </div>
                   </div>
 
-                  {/* Expanded: individual assessment history */}
-                  {isExpanded && memberAssessments.length > 0 && (
+                  {/* Expanded: individual assessment history + clear history action */}
+                  {isExpanded && (
                     <div className="border-t border-[var(--border)] bg-[var(--bg)] px-4 py-3">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text)] opacity-60 mb-2">Session History</p>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text)] opacity-60">Session History</p>
+
+                        {/* Clear history */}
+                        {memberAssessments.length > 0 && (
+                          isConfirmingClear ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-xs text-[var(--text)] opacity-70">Clear all {memberAssessments.length} session{memberAssessments.length !== 1 ? "s" : ""}?</span>
+                              <button
+                                onClick={() => void clearHistory(user.id)}
+                                disabled={isClearing}
+                                className="px-2 py-0.5 rounded text-xs font-semibold bg-red-500/15 text-red-400 border border-red-400/30 hover:bg-red-500/25 transition-colors"
+                              >
+                                {isClearing ? "Clearing…" : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmClearId(null)}
+                                className="px-2 py-0.5 rounded text-xs text-[var(--text)] border border-[var(--border)] hover:text-[var(--text-h)] transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmClearId(user.id)}
+                              className="flex items-center gap-1 text-xs text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 transition-all"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                              </svg>
+                              Clear history
+                            </button>
+                          )
+                        )}
+                      </div>
                       <div className="flex flex-col gap-2">
                         {memberAssessments.map((a) => {
                           const isExpA = expandedAssessmentId === a.id;
@@ -430,20 +570,14 @@ function OverviewTab({
                                       value={editScoreValue}
                                       onChange={(e) => setEditScoreValue(e.target.value)}
                                       onKeyDown={(e) => {
-                                        if (e.key === "Enter") {
-                                          const v = Math.max(0, Math.min(100, parseInt(editScoreValue, 10)));
-                                          if (!isNaN(v)) void onEditScore(a.id, v).then(() => setEditingScoreId(null));
-                                        }
+                                        if (e.key === "Enter") commitScore(a.id);
                                         if (e.key === "Escape") setEditingScoreId(null);
                                       }}
                                       autoFocus
                                       className="w-14 rounded-md border border-[var(--accent)] bg-[var(--card-bg)] text-[var(--text-h)] text-xs font-bold text-center px-1 py-0.5 focus:outline-none"
                                     />
                                     <button
-                                      onClick={() => {
-                                        const v = Math.max(0, Math.min(100, parseInt(editScoreValue, 10)));
-                                        if (!isNaN(v)) void onEditScore(a.id, v).then(() => setEditingScoreId(null));
-                                      }}
+                                      onClick={() => commitScore(a.id)}
                                       className="p-1 rounded text-emerald-400 hover:bg-emerald-500/10 transition-colors"
                                       title="Save"
                                     >
@@ -780,16 +914,30 @@ function RosterTab({
   users,
   assessments,
   onUsersChange,
+  onResetPassword,
 }: {
   users: User[];
   assessments: Assessment[];
   onUsersChange: () => void;
+  onResetPassword: (userId: number) => Promise<void>;
 }) {
   const [addName, setAddName] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+  const [confirmResetId, setConfirmResetId] = useState<number | null>(null);
+  const [resettingId, setResettingId] = useState<number | null>(null);
+
+  async function resetPassword(userId: number) {
+    setConfirmResetId(null);
+    setResettingId(userId);
+    try {
+      await onResetPassword(userId);
+    } finally {
+      setResettingId(null);
+    }
+  }
 
   async function addMember() {
     if (!addName.trim()) return;
@@ -871,12 +1019,25 @@ function RosterTab({
                   ? Math.round(userAssessments.reduce((s, a) => s + a.score, 0) / userAssessments.length)
                   : null;
               const isConfirming = confirmDeleteId === user.id;
+              const isConfirmingReset = confirmResetId === user.id;
+              const isResetting = resettingId === user.id;
+              const hasPassword = user.hasPassword === 1;
               return (
                 <div
                   key={user.id}
                   className="flex items-center gap-4 rounded-xl border border-[var(--border)] px-4 py-3 bg-[var(--card-bg)]"
                 >
-                  <span className="flex-1 text-sm font-medium text-[var(--text-h)]">{user.name}</span>
+                  <div className="flex-1 min-w-0 flex items-center gap-2">
+                    <span className="text-sm font-medium text-[var(--text-h)] truncate">{user.name}</span>
+                    {!hasPassword && (
+                      <span
+                        title="Hasn't set a password yet — the password they enter on first login will become theirs."
+                        className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-yellow-900/40 text-yellow-300 border border-yellow-700/40 flex-shrink-0"
+                      >
+                        Unclaimed
+                      </span>
+                    )}
+                  </div>
                   <span className="w-24 text-center text-sm text-[var(--text)]">
                     {userAssessments.length}
                   </span>
@@ -889,7 +1050,24 @@ function RosterTab({
                       <span className="text-xs text-[var(--text)] opacity-40">—</span>
                     )}
                   </span>
-                  {isConfirming ? (
+                  {isConfirmingReset ? (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <span className="text-xs text-[var(--text)] opacity-70">Reset password?</span>
+                      <button
+                        onClick={() => void resetPassword(user.id)}
+                        disabled={isResetting}
+                        className="px-2.5 py-1 rounded-lg bg-[var(--accent-bg)] text-[var(--accent)] border border-[var(--accent-border)] text-xs font-semibold hover:opacity-80 transition-colors"
+                      >
+                        {isResetting ? "Resetting…" : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmResetId(null)}
+                        className="px-2.5 py-1 rounded-lg border border-[var(--border)] text-[var(--text)] text-xs font-semibold hover:text-[var(--text-h)] transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : isConfirming ? (
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
                         onClick={() => void deleteMember(user.id)}
@@ -905,19 +1083,33 @@ function RosterTab({
                       </button>
                     </div>
                   ) : (
-                  <button
-                    onClick={() => setConfirmDeleteId(user.id)}
-                    disabled={deletingId === user.id}
-                    title="Remove member"
-                    className="w-8 flex justify-center p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-20"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="3 6 5 6 21 6" />
-                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                      <path d="M10 11v6M14 11v6" />
-                      <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                    </svg>
-                  </button>
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {hasPassword && (
+                      <button
+                        onClick={() => setConfirmResetId(user.id)}
+                        title="Reset password — the student's next login will claim a new one"
+                        className="p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-[var(--accent)] hover:bg-[var(--accent-bg)] transition-all"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                          <path d="M7 11V7a5 5 0 0 1 9.9-1"/>
+                        </svg>
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setConfirmDeleteId(user.id)}
+                      disabled={deletingId === user.id}
+                      title="Remove member"
+                      className="w-8 flex justify-center p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 transition-all disabled:opacity-20"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="3 6 5 6 21 6" />
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                        <path d="M10 11v6M14 11v6" />
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                      </svg>
+                    </button>
+                  </div>
                   )}
                 </div>
               );
@@ -942,15 +1134,196 @@ interface ManagedUser {
   email: string | null;
   avatarUrl: string | null;
   status: "pending" | "approved" | "rejected";
-  role: "student" | "admin";
+  role: "student" | "admin" | "manager";
   createdAt: string | null;
 }
 
-function AccessTab({ token }: { token: string | null }) {
+type SectionDef = {
+  id: string;
+  label: string;
+  count: number;
+  countColor: string;
+  emptyText: string;
+  rows: ManagedUser[];
+  extra?: React.ReactNode;
+};
+
+function statusBadge(status: ManagedUser["status"]): string {
+  if (status === "approved") return "bg-emerald-900/40 text-emerald-300 border-emerald-700/40";
+  if (status === "pending") return "bg-yellow-900/40 text-yellow-300 border-yellow-700/40";
+  return "bg-red-900/40 text-red-400 border-red-700/40";
+}
+
+function RoleBadge({ role }: { role: ManagedUser["role"] }) {
+  if (role === "manager") return (
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 bg-purple-900/40 text-purple-300 border-purple-700/40">
+      Manager
+    </span>
+  );
+  if (role === "admin") return (
+    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 bg-[var(--accent-bg)] text-[var(--accent)] border-[var(--accent-border)]">
+      Admin
+    </span>
+  );
+  return null;
+}
+
+interface UserRowProps {
+  user: ManagedUser;
+  showActions: boolean;
+  pendingRole: "student" | "admin" | "manager" | undefined;
+  actingId: number | null;
+  savingRoles: boolean;
+  isManager: boolean;
+  onStageRole: (id: number, role: "student" | "admin" | "manager") => void;
+  onApprove: (id: number) => Promise<void>;
+  onReject: (id: number) => Promise<void>;
+  onRemove: (id: number) => Promise<void>;
+}
+
+function UserRow({ user, showActions, pendingRole, actingId, savingRoles, isManager, onStageRole, onApprove, onReject, onRemove }: UserRowProps) {
+  const effectiveRole = pendingRole ?? user.role;
+  const userIsManager = effectiveRole === "manager";
+  const userIsAdmin = effectiveRole === "admin";
+  const userIsStudent = effectiveRole === "student";
+  const hasPendingChange = pendingRole !== undefined;
+  return (
+    <div className={`flex items-center gap-3 px-6 py-3 transition-colors ${hasPendingChange ? "bg-yellow-500/5" : "hover:bg-[var(--card-bg)]/60"}`}>
+      {user.avatarUrl ? (
+        <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full flex-shrink-0" />
+      ) : (
+        <span className="w-8 h-8 rounded-full bg-[var(--accent-bg)] border border-[var(--accent-border)] flex items-center justify-center text-xs font-bold text-[var(--accent)] flex-shrink-0">
+          {user.name.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-[var(--text-h)] truncate">{user.name}</p>
+          <RoleBadge role={user.role} />
+          {hasPendingChange && (
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 bg-yellow-900/40 text-yellow-300 border-yellow-700/40">
+              → {pendingRole}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-[var(--text)] opacity-60 truncate">{user.email ?? "—"}</p>
+      </div>
+      {user.status !== "approved" && (
+        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 ${statusBadge(user.status)}`}>
+          {user.status}
+        </span>
+      )}
+      {showActions && (
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {user.status !== "approved" && (
+            <button
+              onClick={() => void onApprove(user.id)}
+              disabled={actingId === user.id || savingRoles}
+              className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 disabled:opacity-40 transition-colors"
+            >
+              Approve
+            </button>
+          )}
+
+          {isManager && (
+            <>
+              {userIsManager && (
+                <button
+                  onClick={() => onStageRole(user.id, "admin")}
+                  disabled={savingRoles}
+                  className="px-2.5 py-1 rounded-lg bg-purple-900/30 text-purple-300 border border-purple-700/40 text-xs font-semibold hover:opacity-75 disabled:opacity-40 transition-colors"
+                >
+                  Remove Manager
+                </button>
+              )}
+              {userIsAdmin && (
+                <>
+                  <button
+                    onClick={() => onStageRole(user.id, "manager")}
+                    disabled={savingRoles}
+                    className="px-2.5 py-1 rounded-lg bg-purple-900/30 text-purple-300 border border-purple-700/40 text-xs font-semibold hover:opacity-75 disabled:opacity-40 transition-colors"
+                  >
+                    Make Manager
+                  </button>
+                  <button
+                    onClick={() => onStageRole(user.id, "student")}
+                    disabled={savingRoles}
+                    className="px-2.5 py-1 rounded-lg bg-[var(--accent-bg)] text-[var(--accent)] border border-[var(--accent-border)] text-xs font-semibold hover:opacity-75 disabled:opacity-40 transition-colors"
+                  >
+                    Remove Admin
+                  </button>
+                </>
+              )}
+              {userIsStudent && (
+                <>
+                  <button
+                    onClick={() => onStageRole(user.id, "manager")}
+                    disabled={savingRoles}
+                    className="px-2.5 py-1 rounded-lg bg-purple-900/30 text-purple-300 border border-purple-700/40 text-xs font-semibold hover:opacity-75 disabled:opacity-40 transition-colors"
+                  >
+                    Make Manager
+                  </button>
+                  <button
+                    onClick={() => onStageRole(user.id, "admin")}
+                    disabled={savingRoles}
+                    className="px-2.5 py-1 rounded-lg bg-[var(--accent-bg)] text-[var(--accent)] border border-[var(--accent-border)] text-xs font-semibold hover:opacity-75 disabled:opacity-40 transition-colors"
+                  >
+                    Make Admin
+                  </button>
+                </>
+              )}
+            </>
+          )}
+
+          {!userIsManager && (
+            <>
+              {user.status !== "rejected" && !userIsAdmin && (
+                <button
+                  onClick={() => void onReject(user.id)}
+                  disabled={actingId === user.id || savingRoles}
+                  className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-400 border border-red-400/30 text-xs font-semibold hover:bg-red-500/25 disabled:opacity-40 transition-colors"
+                >
+                  Reject
+                </button>
+              )}
+              <button
+                onClick={() => void onRemove(user.id)}
+                disabled={actingId === user.id || savingRoles}
+                title="Remove user"
+                className="p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-20 transition-all"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                  <path d="M10 11v6M14 11v6" />
+                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+                </svg>
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AccessTab({ token, currentRole }: { token: string | null; currentRole: "student" | "admin" | "manager" }) {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [authError, setAuthError] = useState<string | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
+  const [openSections, setOpenSections] = useState<Set<string>>(new Set(["pending", "managers", "admins", "students", "rejected"]));
+  const [pendingRoles, setPendingRoles] = useState<Record<number, "student" | "admin" | "manager">>({});
+  const [savingRoles, setSavingRoles] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  function toggleSection(id: string) {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
 
   const authHeader = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -963,7 +1336,7 @@ function AccessTab({ token }: { token: string | null }) {
       });
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) {
-          setAuthError("This section requires a Google-authenticated admin account. Dev-mode / password sessions can't manage user access.");
+          setAuthError("This section requires manager access.");
         } else {
           setAuthError(`Server error (${res.status}).`);
         }
@@ -1034,8 +1407,54 @@ function AccessTab({ token }: { token: string | null }) {
     setActingId(null);
   }
 
+  function stageRole(id: number, role: "student" | "admin" | "manager") {
+    setSaveError(null);
+    const current = users.find((u) => u.id === id);
+    setPendingRoles((prev) => {
+      const next = { ...prev };
+      if (current && current.role === role) {
+        // Reverting to current role — drop the pending change
+        delete next[id];
+      } else {
+        next[id] = role;
+      }
+      return next;
+    });
+  }
+
+  function discardPendingRoles() {
+    setPendingRoles({});
+    setSaveError(null);
+  }
+
+  async function savePendingRoles() {
+    const entries = Object.entries(pendingRoles);
+    if (entries.length === 0) return;
+    setSavingRoles(true);
+    setSaveError(null);
+    let failed = 0;
+    for (const [idStr, role] of entries) {
+      const res = await fetch(`http://localhost:3001/api/admin/users/${idStr}/set-role`, {
+        method: "POST",
+        headers: { ...authHeader, "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!res.ok) failed++;
+    }
+    if (failed > 0) {
+      setSaveError(`${failed} of ${entries.length} change(s) failed. Make sure you're signed in as a manager.`);
+    } else {
+      setPendingRoles({});
+    }
+    await fetchUsers();
+    setSavingRoles(false);
+  }
+
+  const isManager = currentRole === "manager";
   const pending = users.filter((u) => u.status === "pending");
-  const approved = users.filter((u) => u.status === "approved");
+  const managers = users.filter((u) => u.status === "approved" && u.role === "manager");
+  const admins = users.filter((u) => u.status === "approved" && u.role === "admin");
+  const students = users.filter((u) => u.status === "approved" && u.role === "student");
   const rejected = users.filter((u) => u.status === "rejected");
 
   if (loading) {
@@ -1051,123 +1470,158 @@ function AccessTab({ token }: { token: string | null }) {
     );
   }
 
-  function statusBadge(status: ManagedUser["status"]) {
-    if (status === "approved") return "bg-emerald-900/40 text-emerald-300 border-emerald-700/40";
-    if (status === "pending") return "bg-yellow-900/40 text-yellow-300 border-yellow-700/40";
-    return "bg-red-900/40 text-red-400 border-red-700/40";
-  }
+  const sections: SectionDef[] = [
+    {
+      id: "pending",
+      label: "Needs Review",
+      count: pending.length,
+      countColor: "bg-yellow-900/40 text-yellow-300 border-yellow-700/40",
+      emptyText: "No pending requests.",
+      rows: pending,
+      extra: pending.length > 1 ? (
+        <button
+          onClick={(e) => { e.stopPropagation(); void approveAll(); }}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 transition-colors"
+        >
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          Approve All
+        </button>
+      ) : undefined,
+    },
+    {
+      id: "managers",
+      label: "Managers",
+      count: managers.length,
+      countColor: "bg-purple-900/40 text-purple-300 border-purple-700/40",
+      emptyText: "No managers yet.",
+      rows: managers,
+    },
+    {
+      id: "admins",
+      label: "Admins",
+      count: admins.length,
+      countColor: "bg-[var(--accent-bg)] text-[var(--accent)] border-[var(--accent-border)]",
+      emptyText: "No admins yet.",
+      rows: admins,
+    },
+    {
+      id: "students",
+      label: "Students",
+      count: students.length,
+      countColor: "bg-[var(--border)]/60 text-[var(--text)] border-[var(--border)]",
+      emptyText: "No approved students yet.",
+      rows: students,
+    },
+    {
+      id: "rejected",
+      label: "Rejected",
+      count: rejected.length,
+      countColor: "bg-red-900/40 text-red-400 border-red-700/40",
+      emptyText: "No rejected users.",
+      rows: rejected,
+    },
+  ];
 
-  function UserRow({ user, showActions }: { user: ManagedUser; showActions: boolean }) {
-    return (
-      <div className="flex items-center gap-3 rounded-xl border border-[var(--border)] px-4 py-3 bg-[var(--card-bg)]">
-        {user.avatarUrl ? (
-          <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full flex-shrink-0" />
-        ) : (
-          <span className="w-8 h-8 rounded-full bg-[var(--accent-bg)] border border-[var(--accent-border)] flex items-center justify-center text-xs font-bold text-[var(--accent)] flex-shrink-0">
-            {user.name.charAt(0).toUpperCase()}
-          </span>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-[var(--text-h)] truncate">{user.name}</p>
-          <p className="text-xs text-[var(--text)] opacity-60 truncate">{user.email ?? "—"}</p>
-        </div>
-        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide flex-shrink-0 ${statusBadge(user.status)}`}>
-          {user.status}
-        </span>
-        {showActions && (
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            {user.status !== "approved" && (
-              <button
-                onClick={() => void approve(user.id)}
-                disabled={actingId === user.id}
-                className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 disabled:opacity-40 transition-colors"
-              >
-                Approve
-              </button>
-            )}
-            {user.status !== "rejected" && user.role !== "admin" && (
-              <button
-                onClick={() => void reject(user.id)}
-                disabled={actingId === user.id}
-                className="px-2.5 py-1 rounded-lg bg-red-500/15 text-red-400 border border-red-400/30 text-xs font-semibold hover:bg-red-500/25 disabled:opacity-40 transition-colors"
-              >
-                Reject
-              </button>
-            )}
-            {user.role !== "admin" && (
-              <button
-                onClick={() => void remove(user.id)}
-                disabled={actingId === user.id}
-                title="Remove user"
-                className="p-1.5 rounded-lg text-[var(--text)] opacity-40 hover:opacity-100 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-20 transition-all"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6" />
-                  <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                  <path d="M10 11v6M14 11v6" />
-                  <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
-                </svg>
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    );
-  }
+  const pendingCount = Object.keys(pendingRoles).length;
 
   return (
-    <div className="space-y-8">
-      {/* Pending */}
-      <div>
-        <div className="flex items-center gap-2 mb-3">
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)]">Pending Approval</h2>
-          {pending.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full bg-yellow-900/40 text-yellow-300 text-[10px] font-bold border border-yellow-700/40">
-              {pending.length}
-            </span>
-          )}
-          {pending.length > 1 && (
+    <div className="space-y-4">
+      {/* Save bar — shown when there are unsaved role changes */}
+      {pendingCount > 0 && (
+        <div className="sticky top-0 z-10 flex items-center gap-3 rounded-xl border-2 border-[var(--accent-border)] bg-[var(--accent-bg)] px-4 py-3 backdrop-blur-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--accent)] flex-shrink-0">
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <span className="text-sm font-semibold text-[var(--text-h)]">
+            {pendingCount} unsaved role change{pendingCount !== 1 ? "s" : ""}
+          </span>
+          <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={() => void approveAll()}
-              className="ml-auto flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-400/30 text-xs font-semibold hover:bg-emerald-500/25 transition-colors"
+              onClick={discardPendingRoles}
+              disabled={savingRoles}
+              className="px-3 py-1.5 rounded-lg border border-[var(--border)] text-[var(--text)] text-xs font-semibold hover:text-[var(--text-h)] hover:border-[var(--text)] disabled:opacity-40 transition-colors"
             >
-              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              Approve All
+              Discard
             </button>
-          )}
-        </div>
-        {pending.length === 0 ? (
-          <p className="text-sm text-[var(--text)] italic opacity-60">No pending requests.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {pending.map((u) => <UserRow key={u.id} user={u} showActions />)}
-          </div>
-        )}
-      </div>
-
-      {/* Approved */}
-      <div>
-        <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)] mb-3">Approved</h2>
-        {approved.length === 0 ? (
-          <p className="text-sm text-[var(--text)] italic opacity-60">No approved users yet.</p>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {approved.map((u) => <UserRow key={u.id} user={u} showActions />)}
-          </div>
-        )}
-      </div>
-
-      {/* Rejected */}
-      {rejected.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-[var(--text)] mb-3">Rejected</h2>
-          <div className="flex flex-col gap-2">
-            {rejected.map((u) => <UserRow key={u.id} user={u} showActions />)}
+            <button
+              onClick={() => void savePendingRoles()}
+              disabled={savingRoles}
+              className="px-4 py-1.5 rounded-lg bg-[var(--accent)] text-white text-xs font-bold hover:opacity-85 disabled:opacity-50 transition-opacity"
+            >
+              {savingRoles ? "Saving…" : "Save Changes"}
+            </button>
           </div>
         </div>
       )}
+
+      {saveError && (
+        <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          {saveError}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-[var(--border)] overflow-hidden divide-y divide-[var(--border)]">
+        {sections.map((section) => {
+        const isOpen = openSections.has(section.id);
+        return (
+          <div key={section.id}>
+            <button
+              onClick={() => toggleSection(section.id)}
+              className="w-full flex items-center gap-3 px-5 py-4 bg-[var(--card-bg)] hover:bg-[var(--border)]/20 transition-colors text-left"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="13" height="13"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`flex-shrink-0 text-[var(--text)] transition-transform duration-150 ${isOpen ? "rotate-90" : ""}`}
+              >
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+              <span className="text-sm font-semibold uppercase tracking-widest text-[var(--text-h)]">
+                {section.label}
+              </span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${section.countColor}`}>
+                {section.count}
+              </span>
+              {section.extra && <div className="ml-auto">{section.extra}</div>}
+            </button>
+
+            {isOpen && (
+              <div className="bg-[var(--bg)] divide-y divide-[var(--border)]">
+                {section.rows.length === 0 ? (
+                  <p className="px-6 py-4 text-sm text-[var(--text)] italic opacity-60">{section.emptyText}</p>
+                ) : (
+                  section.rows.map((u) => (
+                    <UserRow
+                      key={u.id}
+                      user={u}
+                      showActions
+                      pendingRole={pendingRoles[u.id]}
+                      actingId={actingId}
+                      savingRoles={savingRoles}
+                      isManager={isManager}
+                      onStageRole={stageRole}
+                      onApprove={approve}
+                      onReject={reject}
+                      onRemove={remove}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      </div>
     </div>
   );
 }
@@ -1323,7 +1777,7 @@ function SettingsTab() {
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 export default function Admin() {
-  const { token } = useAuth();
+  const { token, user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [users, setUsers] = useState<User[]>([]);
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -1344,6 +1798,21 @@ export default function Admin() {
     });
     if (res.ok) {
       setAssessments((prev) => prev.map((a) => a.id === id ? { ...a, score } : a));
+    }
+  }
+
+  async function handleClearHistory(userId: number) {
+    await fetch(`http://localhost:3001/api/admin/users/${userId}/assessments`, { method: "DELETE" });
+    setAssessments((prev) => prev.filter((a) => a.userId !== userId));
+  }
+
+  async function handleResetPassword(userId: number) {
+    const res = await fetch(`http://localhost:3001/api/admin/users/${userId}/reset-password`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, hasPassword: 0 } : u)));
     }
   }
 
@@ -1427,16 +1896,16 @@ export default function Admin() {
       <TabBar active={activeTab} onChange={setActiveTab} />
 
       {activeTab === "overview" && (
-        <OverviewTab users={users} topics={topics} assessments={assessments} onDeleteAssessment={handleDeleteAssessment} onEditScore={handleEditScore} />
+        <OverviewTab users={users} topics={topics} assessments={assessments} onDeleteAssessment={handleDeleteAssessment} onEditScore={handleEditScore} onClearHistory={handleClearHistory} />
       )}
       {activeTab === "knowledge" && (
         <KnowledgeTab topics={topics} onTopicsChange={() => void fetchAll()} />
       )}
       {activeTab === "roster" && (
-        <RosterTab users={users} assessments={assessments} onUsersChange={() => void fetchAll()} />
+        <RosterTab users={users} assessments={assessments} onUsersChange={() => void fetchAll()} onResetPassword={handleResetPassword} />
       )}
       {activeTab === "access" && (
-        <AccessTab token={token} />
+        <AccessTab token={token} currentRole={authUser?.role ?? "student"} />
       )}
       {activeTab === "settings" && (
         <SettingsTab />

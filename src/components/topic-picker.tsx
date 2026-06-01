@@ -59,7 +59,7 @@ export default function TopicPicker({ topics, selectedTopicId, onSelect }: Topic
               'group text-left rounded-xl border-2 px-5 py-4 transition-all duration-150 cursor-pointer',
               'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]',
               isSelected
-                ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-lg shadow-indigo-900/20'
+                ? 'border-[var(--accent)] bg-[var(--accent-bg)] shadow-lg shadow-orange-900/20'
                 : 'border-[var(--border)] bg-[var(--card-bg)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-bg)] hover:shadow-md',
             ].join(' ')}
           >

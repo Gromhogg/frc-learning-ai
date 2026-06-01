@@ -26,6 +26,8 @@ export default function AuthCallback() {
         setSession(token, user);
         if (status === "pending") {
           navigate("/pending", { replace: true });
+        } else if (user.role === "admin" || user.role === "manager") {
+          navigate("/admin", { replace: true });
         } else {
           navigate("/", { replace: true });
         }

@@ -1,0 +1,51 @@
+CNC ROUTER OPERATION
+Mentor Knowledge Guide — FIRST Robotics Team
+
+SAFETY REQUIREMENTS
+Safety glasses required at all times. The router spins at very high RPM — never reach near the spindle while it is moving. Keep the enclosure door (if present) closed during cuts. Secure all workpieces before starting — an unsecured sheet of plywood moving at feed rate becomes a projectile. Wear hearing protection; routers are loud. Do not run wood cutting bits in aluminum without mentor approval.
+
+WHAT IS A CNC ROUTER
+A CNC router is similar to a CNC mill but optimized for large, flat sheet material — plywood, MDF, foam, HDPE, and sometimes thin aluminum. The cutting area is typically 2×4 ft or 4×8 ft. Routers run at much higher RPM (10,000–24,000) and lower cutting forces than a mill because they cut lighter materials. On the robotics team we use the router primarily to cut polycarbonate panels, HDPE plates, wood prototypes, and foam cores.
+
+MATERIAL CAPABILITIES
+Woods and MDF: Fast cuts, large chip loads possible. Use up-cut spiral bits for through cuts; down-cut for surfaces that must stay clean on top.
+Polycarbonate and HDPE: Single-flute O-flute bits work best — the large flute gullet clears chips before they melt back into the cut. Keep feed rate up to prevent heat buildup.
+Foam (EPS / XPS): Very high feed rate, low RPM. Single-flute or straight bits. Dust collection is critical — foam dust is a respiratory hazard.
+Thin aluminum (under 1/4"): Possible with the right bit and speeds, but check with your mentor first. Use 2-flute upcut carbide bits, mist lubrication, and slow feed rates. This is on the edge of what a router can handle reliably.
+
+TOOLING
+Straight bits: Simple two-flute for general purpose cutting.
+Upcut spiral: Pulls chips up and out of the cut. Best for through-cuts in wood and plastic.
+Downcut spiral: Pushes chips down. Leaves a clean top surface, but chips pack in — only use for shallow cuts or with good dust collection.
+O-flute (single flute): Large chip gullet designed for plastics. Prevents chip re-cutting and melting.
+V-bits: For engraving, chamfering edges, and V-carving.
+Ball-nose: For 3D contour carving. Not typically used for flat sheet work.
+
+SPOILBOARD AND WORKHOLDING
+The CNC router cuts a spoilboard — a sacrificial MDF or plywood surface that lives on the machine table. It gets re-faced periodically to keep it flat. Always cut into the spoilboard slightly (0.01–0.03") on through-cuts to ensure you cut fully through without cutting into the metal table beneath.
+Workholding options:
+- Screws into the spoilboard: Most secure. Drill pilot holes and drive screws outside the cut area.
+- Double-sided tape: Good for small or thin parts. The tape must be compressed evenly to prevent part lift.
+- Tabs: Leave small bridges of material (set in CAM) connecting the part to the sheet. Break off tabs after the cut with a chisel or flush-cut saw.
+- Vacuum table: If available, holds sheet flat without clamps. Confirm vacuum is holding before running.
+
+SETTING UP A JOB
+1. Load the G-code into the controller software.
+2. Secure the workpiece on the spoilboard.
+3. Set X/Y zero at the front-left corner of your stock (or use the center — match whatever your CAM program was set to).
+4. Touch off Z to the top of the material using a touch plate or manual paper method.
+5. Inspect the G-code preview in the controller — verify extents match the size of your part and it isn't going to cut off the edge of the material.
+6. Run a dry cut (air cut) with the spindle off and Z raised to confirm XY motion.
+7. Start the cut. Monitor the first pass for any sign of poor chip evacuation or bit deflection.
+
+FEEDS AND SPEEDS FOR COMMON MATERIALS
+Plywood (1/4" 2-flute upcut, 1/4" DOC): RPM 18,000, Feed 100–120 IPM
+HDPE (1/4" O-flute, 1/8" DOC): RPM 18,000, Feed 80–100 IPM
+Polycarbonate (1/4" O-flute, full depth): RPM 18,000, Feed 60–80 IPM
+Thin aluminum (1/8" 2-flute, 0.03" DOC): RPM 12,000, Feed 20–30 IPM — increase depth incrementally
+
+DUST COLLECTION
+Connect the dust boot to the shop vac or dust collector before every cut. Foam and MDF dust in particular are health hazards. Never run the router without dust collection in a closed space. Clean the spoilboard and table after each job.
+
+AFTER THE CUT
+Break off tabs carefully — use a flush-cut saw or sharp chisel, not by bending. Sand or deburr edges as needed. Return bits to their labeled storage. Log the material used in the shop log.

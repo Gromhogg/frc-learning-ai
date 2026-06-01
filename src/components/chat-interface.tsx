@@ -1,7 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { type UIMessage, isToolUIPart, getToolName } from 'ai';
-import QuizWidget, { type QuizWidgetProps } from './quiz-widget';
+import QuizWidget, { type QuizWidgetProps, type QuizAnswer } from './quiz-widget';
 import ChecklistWidget, { type ChecklistWidgetProps } from './checklist-widget';
+import DragOrderWidget, { type DragOrderWidgetProps, type DragOrderAnswer } from './drag-order-widget';
+import ScenarioWidget, { type ScenarioWidgetProps, type ScenarioAnswer } from './scenario-widget';
+import CodeRunnerWidget, { type CodeRunnerWidgetProps, type CodeRunnerAnswer } from './code-runner-widget';
+import LabeledDiagramWidget, { type LabeledDiagramWidgetProps } from './labeled-diagram-widget';
+
+export type WidgetAnswer = QuizAnswer | DragOrderAnswer | ScenarioAnswer | CodeRunnerAnswer;
 
 interface ChatInterfaceProps {
   messages: UIMessage[];
@@ -9,6 +15,7 @@ interface ChatInterfaceProps {
   handleInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
   handleSubmit: (e?: React.FormEvent) => void;
   isLoading: boolean;
+  onWidgetAnswer: (toolCallId: string, answer: WidgetAnswer) => void;
 }
 
 function TypingIndicator() {
@@ -28,7 +35,7 @@ function TypingIndicator() {
   );
 }
 
-function MessageBubble({ message }: { message: UIMessage }) {
+function MessageBubble({ message, onWidgetAnswer }: { message: UIMessage; onWidgetAnswer: (toolCallId: string, answer: WidgetAnswer) => void }) {
   const isUser = message.role === 'user';
 
   return (
@@ -69,6 +76,10 @@ function MessageBubble({ message }: { message: UIMessage }) {
             const args = (part.state === 'input-available' || part.state === 'output-available')
               ? (part.input as Record<string, unknown>)
               : undefined;
+            const toolCallId = part.toolCallId;
+            const savedAnswer = (part.state === 'output-available' && part.output && typeof part.output === 'object')
+              ? ((part.output as Record<string, unknown>).answer as unknown)
+              : undefined;
 
             if (toolName === 'showQuiz' && args) {
               return (
@@ -77,6 +88,8 @@ function MessageBubble({ message }: { message: UIMessage }) {
                   question={args.question as QuizWidgetProps['question']}
                   options={args.options as QuizWidgetProps['options']}
                   correctIndex={args.correctIndex as QuizWidgetProps['correctIndex']}
+                  answer={savedAnswer as QuizAnswer | undefined}
+                  onAnswer={(a) => onWidgetAnswer(toolCallId, a)}
                 />
               );
             }
@@ -87,6 +100,57 @@ function MessageBubble({ message }: { message: UIMessage }) {
                   key={i}
                   title={args.title as ChecklistWidgetProps['title']}
                   items={args.items as ChecklistWidgetProps['items']}
+                />
+              );
+            }
+
+            if (toolName === 'showDragOrder' && args) {
+              return (
+                <DragOrderWidget
+                  key={i}
+                  instruction={args.instruction as DragOrderWidgetProps['instruction']}
+                  items={args.items as DragOrderWidgetProps['items']}
+                  answer={savedAnswer as DragOrderAnswer | undefined}
+                  onAnswer={(a) => onWidgetAnswer(toolCallId, a)}
+                />
+              );
+            }
+
+            if (toolName === 'showScenario' && args) {
+              return (
+                <ScenarioWidget
+                  key={i}
+                  title={args.title as ScenarioWidgetProps['title']}
+                  scenario={args.scenario as ScenarioWidgetProps['scenario']}
+                  steps={args.steps as ScenarioWidgetProps['steps']}
+                  answer={savedAnswer as ScenarioAnswer | undefined}
+                  onAnswer={(a) => onWidgetAnswer(toolCallId, a)}
+                />
+              );
+            }
+
+            if (toolName === 'showCodeRunner' && args) {
+              return (
+                <CodeRunnerWidget
+                  key={i}
+                  prompt={args.prompt as CodeRunnerWidgetProps['prompt']}
+                  language={args.language as CodeRunnerWidgetProps['language']}
+                  starterCode={args.starterCode as CodeRunnerWidgetProps['starterCode']}
+                  expectedPatterns={args.expectedPatterns as CodeRunnerWidgetProps['expectedPatterns']}
+                  solutionCode={args.solutionCode as CodeRunnerWidgetProps['solutionCode']}
+                  answer={savedAnswer as CodeRunnerAnswer | undefined}
+                  onAnswer={(a) => onWidgetAnswer(toolCallId, a)}
+                />
+              );
+            }
+
+            if (toolName === 'showLabeledDiagram' && args) {
+              return (
+                <LabeledDiagramWidget
+                  key={i}
+                  title={args.title as LabeledDiagramWidgetProps['title']}
+                  description={args.description as LabeledDiagramWidgetProps['description']}
+                  parts={args.parts as LabeledDiagramWidgetProps['parts']}
                 />
               );
             }
@@ -119,6 +183,7 @@ export default function ChatInterface({
   handleInputChange,
   handleSubmit,
   isLoading,
+  onWidgetAnswer,
 }: ChatInterfaceProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -146,7 +211,7 @@ export default function ChatInterface({
           </p>
         )}
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onWidgetAnswer={onWidgetAnswer} />
         ))}
         {isLoading && <TypingIndicator />}
         <div ref={bottomRef} />

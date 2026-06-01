@@ -3,9 +3,9 @@ import { streamText, tool, jsonSchema, convertToModelMessages } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { eq } from 'drizzle-orm';
 import { db } from '../../db/index.ts';
-import { topics } from '../../db/schema.ts';
+import { topics, assessments, users } from '../../db/schema.ts';
 import { loadKnowledgeFile } from '../lib/knowledge.ts';
-import { buildSystemPrompt } from '../lib/ai.ts';
+import { buildSystemPrompt, type CoveredTopic } from '../lib/ai.ts';
 
 const app = new Hono();
 
@@ -16,7 +16,7 @@ app.post('/', async (c) => {
     userId: number;
   }>();
 
-  const { topicId } = body;
+  const { topicId, userId } = body;
 
   // DefaultChatTransport sends UIMessage[] (with parts), convert to ModelMessage[]
   const modelMessages = await convertToModelMessages(body.messages);
@@ -43,8 +43,45 @@ app.post('/', async (c) => {
     );
   }
 
+  // Fetch this user's name + past assessments to personalise + inform coverage
+  let studentName: string | undefined;
+  if (userId) {
+    const [u] = await db
+      .select({ name: users.name })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+    studentName = u?.name ?? undefined;
+  }
+
+  const coverage: CoveredTopic[] = [];
+  if (userId) {
+    const pastAssessments = await db
+      .select({
+        topicId: assessments.topicId,
+        topicName: topics.name,
+        score: assessments.score,
+        createdAt: assessments.createdAt,
+      })
+      .from(assessments)
+      .leftJoin(topics, eq(assessments.topicId, topics.id))
+      .leftJoin(users, eq(assessments.userId, users.id))
+      .where(eq(assessments.userId, userId));
+
+    for (const a of pastAssessments) {
+      if (a.topicName && a.score != null && a.createdAt) {
+        coverage.push({
+          topicName: a.topicName,
+          score: a.score,
+          completedAt: a.createdAt.slice(0, 10),
+          isCurrentTopic: a.topicId === topicId,
+        });
+      }
+    }
+  }
+
   // Build system prompt
-  const systemPrompt = buildSystemPrompt(topic.name, knowledgeContent);
+  const systemPrompt = buildSystemPrompt(topic.name, knowledgeContent, coverage, studentName);
 
   // Create an Anthropic client that reads ANTHROPIC_API_KEY from process.env
   const anthropic = createAnthropic({
