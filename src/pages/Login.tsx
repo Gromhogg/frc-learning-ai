@@ -54,7 +54,11 @@ export default function Login() {
       role: data.user.role,
       status: data.user.status,
     });
-    navigate(data.user.role === "admin" || data.user.role === "manager" ? "/admin" : "/");
+    // No navigate here — the useEffect above is the single source of routing
+    // truth. It fires when `user` updates with the new (authoritative) role
+    // and sends the student to "/", admin/manager to "/admin". Doing the
+    // navigate here too produced a race when stale prior-session state was
+    // still in context, sometimes routing a student to "/admin".
   }
 
   async function handleSubmit(e: React.FormEvent) {
