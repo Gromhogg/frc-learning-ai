@@ -1,6 +1,15 @@
 CAM — COMPUTER-AIDED MANUFACTURING
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student understands what CAM is
+for and what a CAM workflow looks like. The body below may contain specific
+post-processors, feed/speed values, or strategy names — treat those as
+background for YOU only. Do NOT quiz the student on exact feeds and speeds,
+specific CAM strategies by name, or post-processor settings. Ask about the
+purpose of CAM, the CAD → CAM → G-code → machine flow, and the importance
+of the dry run / simulation step.
+
 WHAT IS CAM
 CAM (Computer-Aided Manufacturing) is the process of turning a 3D CAD model or 2D sketch into machine instructions — G-code — that tell a CNC mill, CNC router, or waterjet what path to follow and at what speed. The CAM software simulates the tool cutting the material and outputs a file the machine controller can read. Getting CAM right means parts come out on-size the first time; getting it wrong means broken tools, scrapped material, or damaged machines.
 

@@ -1,6 +1,15 @@
 WATERJET CUTTING OPERATION
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely operate
+the waterjet. The body below may contain specific PSI values, abrasive
+specs, and cut-quality numbers — treat those as background for YOU only.
+Do NOT quiz the student on exact pressures, abrasive grits, or detailed
+cut-quality grades. Ask about safety, how a waterjet cuts (high-pressure
+water plus abrasive), workholding, and what materials the waterjet is
+good for.
+
 SAFETY REQUIREMENTS
 The waterjet stream at operating pressure (60,000+ PSI) will cut through a hand instantly — treat it like a live blade at all times. Never reach into the cutting zone while the pump is running. Keep bystanders 3 feet back from the tank. Wear safety glasses to protect against splatter. Hearing protection is recommended — the cutting stream is loud. Never point the nozzle at anything you don't intend to cut. When the machine finishes, confirm the high-pressure water is fully off before reaching into the tank.
 

@@ -2,14 +2,9 @@ import { Hono } from "hono";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { generateText } from "ai";
 import { db } from "../../db/index.ts";
-import { assessments, users, topics, settings } from "../../db/schema.ts";
+import { assessments, users, topics } from "../../db/schema.ts";
 import { eq, desc } from "drizzle-orm";
 import { verifyToken } from "../lib/jwt.ts";
-
-const DEFAULTS: Record<string, string> = {
-  minQuestions: "3",
-  minCorrectAnswers: "0",
-};
 
 const app = new Hono();
 
@@ -96,26 +91,6 @@ app.delete("/users/:id/assessments", async (c) => {
   if (!id) return c.json({ error: "Invalid user id" }, 400);
   await db.delete(assessments).where(eq(assessments.userId, id));
   return c.json({ ok: true });
-});
-
-// GET /api/admin/settings — return all settings (falling back to defaults)
-app.get("/settings", async (c) => {
-  const rows = await db.select().from(settings);
-  const merged: Record<string, string> = { ...DEFAULTS };
-  for (const row of rows) merged[row.key] = row.value;
-  return c.json(merged);
-});
-
-// PUT /api/admin/settings/:key — upsert a single setting
-app.put("/settings/:key", async (c) => {
-  const key = c.req.param("key");
-  const { value } = await c.req.json<{ value: string }>();
-  if (!(key in DEFAULTS)) return c.json({ error: "Unknown setting key" }, 400);
-  await db
-    .insert(settings)
-    .values({ key, value: String(value) })
-    .onConflictDoUpdate({ target: settings.key, set: { value: String(value) } });
-  return c.json({ key, value: String(value) });
 });
 
 // ── User access management ────────────────────────────────────────────────────

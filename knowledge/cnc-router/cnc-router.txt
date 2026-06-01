@@ -1,6 +1,15 @@
 CNC ROUTER OPERATION
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely run the
+router. The body below contains specific RPM ranges, bit types, and
+material specs — treat those as background for YOU only. Do NOT quiz the
+student on exact RPMs, bit names, or material-specific feeds. Ask about
+safety, workholding choices, what materials the router is for, the
+spoilboard's purpose, and how they would notice and respond to a problem
+mid-job.
+
 SAFETY REQUIREMENTS
 Safety glasses required at all times. The router spins at very high RPM — never reach near the spindle while it is moving. Keep the enclosure door (if present) closed during cuts. Secure all workpieces before starting — an unsecured sheet of plywood moving at feed rate becomes a projectile. Wear hearing protection; routers are loud. Do not run wood cutting bits in aluminum without mentor approval.
 

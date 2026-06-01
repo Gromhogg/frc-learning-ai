@@ -1,1 +1,97 @@
-what thickness wire to use, when to cut wires.
+ELECTRICAL WIRING — GENERAL FAMILIARITY
+Mentor Knowledge Guide — FIRST Robotics Team
+
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely help wire
+the robot. The goal is *general* understanding — not the exact wire gauge
+or breaker amperage for every case. Quiz the student on safety, the big
+picture of how power moves through the robot, the why behind choices, and
+what could go wrong. Do NOT quiz on exact gauge-vs-amperage tables, exact
+breaker ratings, or specific connector part numbers.
+
+SAFETY FIRST
+- Unplug the battery before working on the robot's electrical system. The
+  main breaker is also off-switch — pop it if you're unsure.
+- Don't wear loose jewelry or watches around the battery terminals; a
+  short across them releases a lot of energy very fast.
+- Wear safety glasses when cutting, stripping, or crimping. Tiny pieces
+  of insulation and stray wire strands fly.
+- If a wire is hot to the touch, or you smell something burning, stop
+  and find a mentor.
+
+THE BIG PICTURE
+A robot's electrical system is a power tree:
+
+  Battery → main breaker → power distribution board → individual
+  breakers → motor controllers, RoboRIO (the brain), radio (wireless
+  comms), and smaller branches for lights, sensors, etc.
+
+The student should be able to trace power from the battery to a motor
+and back. Specific board names and breaker amps do not matter.
+
+CHOOSING WIRE SIZE (GENERAL IDEA, NOT A TABLE)
+- THICKER wire is for HIGHER current. The bigger the current draw, the
+  more copper you need to carry it without heating up or losing voltage.
+- THINNER wire is fine for signals and low-current devices.
+- A good general habit: when you don't know, ask a mentor or follow the
+  team's existing convention rather than guess. Wires that are too thin
+  for the current can heat up and melt insulation.
+
+The student should understand the *principle* (thicker for higher
+current). They should NOT be quizzed on specific gauges for specific
+breaker sizes — that's a chart-lookup, not understanding.
+
+WHEN TO CUT WIRES, AND HOW MUCH
+- Measure the route first; don't free-cut and hope it reaches.
+- Leave a little slack for movement, vibration, and future repairs —
+  but not so much that a loop of wire can snag on something moving.
+- After cutting, strip only the amount of insulation the connector
+  needs. Bare copper sticking out past a connector is a short waiting
+  to happen.
+
+CRIMPING AND CONNECTIONS
+- Most FRC connections are crimped, not soldered. A good crimp is
+  mechanically strong and electrically solid. Soldering battery leads
+  or motor leads is generally avoided.
+- Tug-test every crimp before installing it. A connector that pulls off
+  with a gentle tug will fail on the robot.
+- Use the matching wire gauge for the connector — too thin and the
+  crimp won't hold; too thick and it won't seat.
+
+BREAKERS — THE CONCEPT
+- A breaker is an automatic switch that trips when current goes above
+  its rating, protecting wires and components downstream.
+- The main breaker is large and protects the whole robot.
+- Smaller breakers protect each branch (each motor, each subsystem).
+- The student should know that the breaker rating must match the wire
+  size — a breaker bigger than the wire can carry defeats the purpose.
+
+CAN BUS (KEEP IT SIMPLE)
+- Modern motor controllers and many sensors talk on a single shared
+  pair of wires called the CAN bus.
+- Each device on the bus has a unique ID. Two devices with the same ID
+  is one of the most common bugs.
+- The bus must be terminated correctly at both ends — usually the
+  RoboRIO at one end and the power distribution board at the other.
+
+COMMON MISTAKES TO RECOGNIZE
+- Wire too thin for the current → heats up, smells bad, can melt.
+- Loose connection → intermittent power, motor jitters, weird bugs.
+- Two devices share a CAN ID → one or both don't show up in code.
+- Forgot to put insulation back on a splice → potential short.
+- Cable management bad → wires can get pinched by moving subsystems.
+
+The student should be able to spot these in stories ("a motor was
+working, then suddenly stopped — what would you check?") without
+needing to recite procedures.
+
+WHAT THE AI SHOULD AVOID ASKING
+- Exact wire gauges paired with exact breaker amperages.
+- Specific connector model names (Anderson, Wago, etc.).
+- Specific PDH/PDP product names or pin layouts.
+- Exact CAN bus termination resistance values.
+- Anything that would require a chart lookup or memorization.
+
+Ask about safety, the path of power, the *idea* behind choosing wire
+size, the importance of solid connections, and how a student would
+notice and respond to a problem. That's a comfortable general level.

@@ -1,475 +1,295 @@
 GENERAL KNOWLEDGE OF FRC (FIRST ROBOTICS COMPETITION)
 ======================================================
 
-This file is the source of truth the AI mentor uses when assessing students on
-general FRC knowledge. Keep it factual, current, and team-agnostic where
-possible. Game-specific facts (this year's scoring, field elements, etc.) age
-quickly — note that explicitly so questions remain evergreen.
+LEVEL — GENERAL FAMILIARITY.
+This file gives the AI mentor enough context to check whether a student has
+a comfortable, practical understanding of what FRC is and how it works. It
+is NOT meant to be quizzed on memorized details, exact numbers, or specific
+part names. The student should be able to talk confidently about *concepts*,
+not recite specs.
 
 ────────────────────────────────────────────────────────────────────────
 1. WHAT FRC IS
 ────────────────────────────────────────────────────────────────────────
 
-- FRC stands for FIRST Robotics Competition.
-- FIRST = For Inspiration and Recognition of Science and Technology, founded
-  by Dean Kamen and Woodie Flowers in 1989.
-- FRC is the flagship high-school program in the FIRST family, which also
-  includes FLL (Lego League, ages 4–16), FTC (Tech Challenge, ages 12–18),
-  and FIRST in Show (formerly Jr.FLL).
-- Teams build a roughly 125-pound (≈57 kg) robot in 6–8 weeks each year to
-  compete in a new game revealed at Kickoff.
-- Teams are identified by a permanent number (e.g. "Team 254", "Team 1678",
-  "Team 972"). Lower numbers were founded earlier.
-- The season culminates at the FIRST Championship (a single combined event;
-  in some years it has been split between Houston and Detroit).
+- FRC stands for FIRST Robotics Competition — the high-school program in
+  the FIRST family. FIRST = "For Inspiration and Recognition of Science
+  and Technology."
+- Teams of high schoolers, with mentor support, design and build a robot
+  in a few weeks each year to compete in a new game revealed at Kickoff.
+- Teams are identified by a permanent team number (e.g. "Team 972").
+- The season ends at the FIRST Championship.
 
 ────────────────────────────────────────────────────────────────────────
-2. SEASON STRUCTURE (THE FRC CALENDAR)
+2. SEASON STRUCTURE
 ────────────────────────────────────────────────────────────────────────
 
-- KICKOFF (first Saturday of January): the new game and full Game Manual are
-  released. The first 24 hours are "Kickoff Day" — teams read the manual,
-  watch the game animation, and start prototyping.
-- BUILD SEASON (≈6–8 weeks, January–February): design, prototype, fabricate,
-  wire, program, and practice. Subdivides into:
-    * Strategy & game analysis
-    * Prototyping
-    * CAD freeze
-    * Manufacturing
-    * Assembly
-    * Wiring & pneumatics
-    * Programming & autonomous tuning
-    * Driver practice
-- "Stop Build Day" was retired in 2020; teams now have an unbagged robot and
-  can iterate throughout the season under withholding-allowance rules.
-- COMPETITION SEASON (March–April): District events or Regional events.
-- CHAMPIONSHIP (mid–late April).
-- OFF-SEASON (May–December): training, recruitment, outreach, off-season
-  events (e.g. IRI, Chezy Champs, Battlecry).
+- KICKOFF (early January): the new game is released. Teams start
+  strategizing and prototyping right away.
+- BUILD SEASON: January through February. Strategy, prototyping, CAD,
+  fabrication, wiring, programming, and driver practice all happen in
+  parallel.
+- COMPETITION SEASON: March and April — District or Regional events.
+- CHAMPIONSHIP: late April — the season's culminating event.
+- OFF-SEASON: training, recruitment, outreach, informal off-season events.
 
 ────────────────────────────────────────────────────────────────────────
 3. GAME STRUCTURE (EVERGREEN CONCEPTS)
 ────────────────────────────────────────────────────────────────────────
 
-A match is 2 minutes 30 seconds long:
-- AUTONOMOUS period: first 15 seconds. No driver input — robot runs pre-
-  programmed routines using sensors. Worth bonus points and ranking-point
-  contributions.
-- TELEOP period: remaining 2 minutes 15 seconds. Drivers control robots from
-  behind a glass driver station.
-- ENDGAME: last ~20–30 seconds of teleop. Usually has bonus mechanics —
-  climbing a chain/bar, parking in a zone, balancing on a charging station,
-  etc., depending on the year's game.
+A match is short — about two and a half minutes — split into three parts:
 
-Matches are 3-vs-3 alliances: each match has a RED alliance and a BLUE
-alliance, three robots per side, on a ~27' × 54' carpeted field.
+- AUTONOMOUS: the first stretch, no driver input. The robot runs
+  pre-programmed routines.
+- TELEOP: most of the match. Drivers control the robot from a driver
+  station.
+- ENDGAME: the final stretch. Usually has a bonus mechanic (climbing,
+  parking, balancing) that changes by year.
 
-Scoring depends on the year (game pieces, point values, multipliers). The
-AI should ask about evergreen concepts (autonomous, teleop, endgame,
-alliances, ranking points) rather than current scoring tables, which change
-annually.
+Matches are 3-vs-3: a RED alliance plays a BLUE alliance.
 
-RANKING POINTS (RPs): teams earn RPs in qualification matches in addition
-to win/loss/tie. Two RPs are always given for a Win (1 for a Tie). The other
-RPs change each year (often for hitting a scoring threshold and a "co-op"
-or sustainability objective).
+Scoring changes every year, so the AI should ask about the *concepts*
+(auto, teleop, endgame, alliances) not this season's specific points.
 
 ────────────────────────────────────────────────────────────────────────
 4. EVENT STRUCTURE
 ────────────────────────────────────────────────────────────────────────
 
-- QUALIFICATION ("quals"): ~8–12 round-robin matches per team. Pseudo-random
-  alliance partners. Teams accumulate ranking points; the top 8 advance as
-  alliance captains.
-- ALLIANCE SELECTION: top 8 teams pick partners in a snake-draft (1 picks
-  first, then 8 picks, then 8 picks again, etc.) until 8 alliances of 3 are
-  formed.
-- PLAYOFFS: as of 2023, FRC uses a double-elimination bracket of 8 alliances
-  (was best-of-3 single-elimination before 2023). Matches are best-of-1 in
-  the bracket; finals are best-of-3.
-- DISTRICT MODEL (some regions: New England, FMA, FIM, ONT, ISR, IN, CHS,
-  PCH, PNW, NC, TX): teams play 2 District Events, earn points, top teams
-  advance to District Championship, then to Worlds.
-- REGIONAL MODEL (everywhere else): teams play 1 Regional; winners get
-  Worlds slots.
+- QUALIFICATION MATCHES: each team plays a series of matches with random
+  alliance partners. Results determine seeding.
+- ALLIANCE SELECTION: the top-seeded teams pick partners to form alliances
+  for the playoffs.
+- PLAYOFFS: a bracket of alliances plays for the event title.
+- DISTRICT vs REGIONAL: some regions play multiple smaller "District"
+  events and advance on points; others play one larger "Regional" event
+  with winners advancing.
 
 ────────────────────────────────────────────────────────────────────────
-5. ROBOT — CORE RULES & INSPECTION
+5. THE ROBOT — GENERAL RULES
 ────────────────────────────────────────────────────────────────────────
 
-- WEIGHT LIMIT: 125 lb (about 57 kg) excluding battery and bumpers.
-- FRAME PERIMETER: the smallest convex polygon that contains the robot
-  at the start of the match, measured at standing height. Typical limit
-  is 120" perimeter (~28" × 32" robot), but the year's game can change it.
-- HEIGHT LIMIT: usually 4'–4'6" starting height, with extension allowed
-  during the match up to a year-specific cap.
-- BUMPERS are mandatory. Made of pool noodles + fabric, attached around
-  the frame perimeter at a specific height (typically 0–7.5" off the
-  carpet). Must be RED or BLUE depending on which alliance the robot is
-  on, with team number visible on both colors.
-- ROBOT INSPECTION at each event checks weight, dimensions, bumper rules,
-  electrical wiring, breakers, battery security, and the "kill switch"
-  (a robot signal light, RSL, that must blink solid orange/yellow when
-  enabled).
-- BATTERY: a single 12V sealed lead-acid (SLA) battery, ~17 Ah. Brand
-  examples: MK ES17-12, EnerSys NP18-12. Each robot has multiple
-  batteries that rotate during a competition day.
+- WEIGHT and SIZE LIMITS: every robot has to fit within a weight and
+  size cap set by the game manual. Exact numbers change by year — the
+  concept is that there IS a cap.
+- BUMPERS: required. Wrap the perimeter of the robot, colored RED or
+  BLUE depending on the alliance, with the team number visible.
+- INSPECTION: every robot is checked before competing — weight,
+  dimensions, bumpers, wiring, breakers, required safety lights.
+- BATTERY: one 12-volt battery, swapped out between matches.
 
 ────────────────────────────────────────────────────────────────────────
-6. ELECTRICAL SYSTEM
+6. ELECTRICAL SYSTEM (BIG PICTURE)
 ────────────────────────────────────────────────────────────────────────
 
-CORE COMPONENTS (every legal FRC robot has these):
-- BATTERY (12 V SLA) → wired through the 120 A main breaker → to the
-  Power Distribution Hub (PDH, current REV product) or older Power
-  Distribution Panel (PDP, CTRE).
-- PDH/PDP: distributes power through individual breakers to motor
-  controllers, the radio (via VRM/REV PoE radio adapter), and the
-  RoboRIO.
-- RoboRIO: the FRC robot's primary computer, runs robot code. NI/REV
-  product. Communicates with motor controllers over CAN, PWM, or DIO.
-- VRM (Voltage Regulator Module) or RPM (Radio Power Module): steps
-  battery voltage down to clean 5 V or 12 V outputs for the radio and
-  small electronics.
-- RADIO: OM5P-AC (legacy) or VH-109 (current). Bridges the field
-  Wi-Fi/wired network to the RoboRIO.
-- RSL: Robot Signal Light. Must be visible and blink when robot is
-  enabled, solid when disabled. Required by inspection.
+The electrical system is conceptually simple:
 
-BREAKERS:
-- 120 A main breaker between battery (+) and PDH.
-- 40 A "Snap-Action" breakers (MX-5 style) for motor circuits.
-- 20 A or 30 A for smaller circuits.
-- 10 A "Wago" / blade breakers for low-current things like Spark MAX
-  servos (rarely needed).
+  Battery → Main breaker → Power distribution → Motor controllers,
+  RoboRIO (the robot's computer), radio (for wireless comms), and
+  smaller breakers for everything else.
 
-WIRE GAUGE (RULES OF THUMB):
-- Battery to PDH: 6 AWG.
-- High-current motor branches (40 A circuits, e.g. NEO/Falcon): 10 AWG.
-- 20 A or 30 A branches: 12 AWG.
-- Low-current / signal / sensor: 18–22 AWG.
-- Always crimp Anderson SB50 connectors on battery leads; never solder
-  battery terminals to wire directly.
+What every student should be familiar with:
+- ONE battery, ONE main breaker between it and everything else. The
+  main breaker is the emergency "off switch."
+- Power gets distributed through a central board, each branch on its
+  own smaller breaker.
+- The ROBORIO is the brain — runs the code, tells motor controllers
+  what to do.
+- The RADIO connects the robot to the driver station wirelessly.
+- The CAN BUS is the wiring system most motor controllers talk on.
+- The ROBOT SIGNAL LIGHT blinks when the robot is enabled.
 
-CAN BUS:
-- Most modern motor controllers (Talon FX/Kraken, Spark MAX/Flex,
-  Talon SRX, Victor SPX), the PDH, the Pigeon IMU, and CANcoders sit
-  on a single CAN bus terminated at the PDH and the RoboRIO.
-- CAN runs as a daisy-chain (yellow = CAN-H, green = CAN-L). Two 120-Ω
-  terminating resistors form the bus — one is built into the RoboRIO,
-  one into the PDH. Don't add extra terminators.
-- Each device on CAN has a unique CAN ID (0–62). Conflicting IDs is a
-  classic and time-wasting bug.
+Do NOT quiz on specific breaker amperages, wire gauges, model numbers,
+or specs. The student should be able to explain the *flow* of power and
+the role of each main component.
 
 ────────────────────────────────────────────────────────────────────────
-7. MOTORS & MOTOR CONTROLLERS
+7. MOTORS AND MOTOR CONTROLLERS (GENERAL)
 ────────────────────────────────────────────────────────────────────────
 
-COMMON BRUSHLESS MOTORS (modern FRC, all CAN-controlled):
-- KRAKEN X60 / KRAKEN X44 (CTRE, integrated TalonFX). Most powerful
-  legal motor; ~7.09 N·m stall on the X60.
-- NEO V1.1 / NEO Vortex (REV, used with Spark MAX or Spark Flex). Very
-  common drivetrain choice; integrated hall-effect encoder.
-- FALCON 500 (CTRE, integrated TalonFX). Predecessor to Kraken; still
-  legal and widespread.
+- Robots use ELECTRIC MOTORS to drive wheels, intakes, shooters, arms,
+  elevators, and climbers.
+- Modern FRC uses BRUSHLESS motors almost exclusively — more efficient
+  and more precise than older brushed motors.
+- A MOTOR CONTROLLER takes commands from the RoboRIO and turns them
+  into actual motor power. Sometimes it's built into the motor.
 
-BRUSHED LEGACY MOTORS (becoming rarer but legal):
-- CIM, MiniCIM, BAG, 775pro, RedLine, AndyMark 9015. Use Spark MAX,
-  Talon SRX, Victor SPX, or Spark (PWM) controllers.
-
-CONTROLLERS — KEY PAIRINGS:
-- TalonFX is INTEGRATED into Kraken/Falcon (no separate controller).
-- Spark MAX = REV brushed/brushless controller (typically for NEO).
-- Spark Flex = REV controller for NEO Vortex.
-- Talon SRX, Victor SPX = CTRE brushed legacy controllers.
-- Spark (Rev), VictorSP, TalonSR = PWM-only legacy.
-
-SERVOS: PWM hobby servos, typically 5 V from the PDH 5 V rail or VRM.
-
-ABSOLUTE/INCREMENTAL ENCODERS:
-- CANcoder (CTRE), Cancoder, Through-Bore Encoder (REV), SRX Mag Encoder.
-- Use absolute encoders on swerve modules and any joint that needs to
-  know its position at boot.
+The student should know the concept (motor + controller, commanded by
+code). They should NOT need to recite specific motor model names or
+torque numbers.
 
 ────────────────────────────────────────────────────────────────────────
-8. PNEUMATICS
+8. PNEUMATICS (OPTIONAL)
 ────────────────────────────────────────────────────────────────────────
 
-- Pneumatics are OPTIONAL. Many modern designs skip them entirely.
-- COMPRESSOR (12 V, e.g. VIAIR 90C / Thomas 405) charges the system.
-- WORKING PRESSURE: 60 psi (regulated downstream).
-- STORAGE PRESSURE: max 120 psi (unregulated tank side).
-- Required components: compressor, accumulator tank(s), regulator, two
-  pressure gauges (one upstream of the regulator, one downstream),
-  pressure relief valve set to 125 psi, vent valve (a manual ball valve
-  reachable from the outside to drain the system pre-power-off).
-- CONTROL HUB: REV Pneumatic Hub (PH) or CTRE Pneumatics Control
-  Module (PCM). Controls solenoids and reads the pressure switch.
-- PRESSURE SWITCH: tells the controller when to enable the compressor.
-- SOLENOIDS: usually 24 V or 12 V, single- or double-acting.
-- CYLINDERS: Bimba flat or round-body cylinders, ~1–2" bore typical.
+- Pneumatics use compressed air to push and pull pistons (cylinders).
+  OPTIONAL — many modern designs skip them.
+- A pneumatic system has a compressor, a tank, a regulator that limits
+  working pressure, gauges, a relief valve, a vent valve, and solenoids
+  that control the cylinders.
+- The concept: "compressed air goes through a regulator to a cylinder,
+  controlled by a solenoid the robot turns on and off." Specific PSI
+  values don't matter.
 
 ────────────────────────────────────────────────────────────────────────
 9. DRIVETRAINS
 ────────────────────────────────────────────────────────────────────────
 
-TANK / WEST-COAST DRIVE:
-- 4 or 6 wheels on each side, all driven, often with the center wheel
-  dropped ~1/8" for easier turning ("drop center").
-- Pros: simple, robust, low cost, predictable.
-- Cons: no strafing (lateral motion).
+Three common types — recognize and roughly describe each:
 
-MECANUM:
-- 4 wheels with diagonal rollers; combining wheel directions enables
-  strafing and rotation.
-- Pros: omnidirectional, low part count.
-- Cons: less efficient, weaker pushing power, less popular at top level.
-
-SWERVE:
-- Each wheel is on its own steering module with two motors (one for
-  drive, one for azimuth/turn).
-- Off-the-shelf modules: SDS MK4/MK4i/MK4n, WCP SwerveX, REV MAXSwerve,
-  AndyMark Swerve & Steer.
-- Pros: full omnidirectional control, fast, dominant in modern FRC.
-- Cons: cost, complexity, more programming, more failure modes.
-
-GEAR RATIOS (drivetrain): top-end speed typically 12–18 ft/s adjusted
-for the year's game. Lower speed = more pushing power; higher = faster.
+- TANK / WEST-COAST: wheels on each side, all driven. Predictable.
+  Cannot move sideways.
+- MECANUM: special wheels with diagonal rollers — can move sideways.
+  Less popular at the top level.
+- SWERVE: each wheel both drives and steers independently. Full
+  motion in any direction. Dominant in modern FRC, but complex.
 
 ────────────────────────────────────────────────────────────────────────
 10. ROBOT SUBSYSTEMS (TYPICAL ROLES)
 ────────────────────────────────────────────────────────────────────────
 
-- INTAKE: collects game pieces from the floor or a station. Common
-  styles: over-the-bumper roller, under-the-bumper roller, hooded
-  intake, claw, mecanum/squish-wheel.
-- INDEXER / FEEDER: stores or queues game pieces inside the robot
-  between intake and scoring mechanism.
-- SHOOTER / LAUNCHER: flywheel-based or catapult/punch mechanism for
-  launching game pieces toward a goal.
-- ARM / ELEVATOR: extends the scoring mechanism to a specific height
-  or position. Often combined: an elevator with an arm on the
-  end-effector.
-- ENDGAME MECHANISM: hooks, climbers, winches that engage a field
-  element at the end of the match for bonus points.
-- VISION: a Limelight, PhotonVision-running co-processor (Orange Pi /
-  Raspberry Pi), or a USB webcam used for AprilTag pose estimation,
-  game-piece detection, or auto-aim.
+Most FRC robots are built from a small set of recurring subsystems:
+
+- INTAKE: collects game pieces.
+- INDEXER / FEEDER: queues or stores pieces inside the robot.
+- SHOOTER / LAUNCHER: throws pieces toward a goal.
+- ARM / ELEVATOR: extends the scoring mechanism to a position or height.
+- ENDGAME MECHANISM: usually a climber or winch.
+- VISION SYSTEM: a camera (sometimes with a small computer attached)
+  that helps the robot see field markers or game pieces.
+
+The student should understand what each subsystem is *for*, not memorize
+the parts list of any particular year's robot.
 
 ────────────────────────────────────────────────────────────────────────
-11. SENSORS
+11. SENSORS (BIG PICTURE)
 ────────────────────────────────────────────────────────────────────────
 
-- ENCODERS: count rotations of a shaft. Integrated in NEO/Kraken/Falcon;
-  external for through-bore (CTRE Mag, REV Through-Bore, CANcoder).
-- LIMIT SWITCHES: mechanical or magnetic (Hall-effect) sensors to detect
-  end-of-travel on elevators, arms, intakes.
-- PIGEON 2 / NavX: IMU (gyro + accelerometer) for heading and balance.
-- BEAM-BREAK SENSORS (photo-eye, Banner sensor): detect a game piece
-  passing through an indexer.
-- TIME-OF-FLIGHT SENSORS (e.g. PlayingWithFusion CANrange, Rev 2m
-  distance sensor): distance to a wall or game piece.
-- LIMELIGHT 2+/3/3G/4: vision coprocessor for retroreflective tape (old),
-  AprilTag pose, and ML-based game-piece detection.
+Robots use sensors to know what's going on:
+
+- ENCODERS measure how far / how fast something has turned.
+- LIMIT SWITCHES detect end-of-travel ("I've reached the top").
+- A GYRO / IMU measures orientation and rotation.
+- BEAM-BREAK or distance sensors detect game pieces.
+- CAMERAS for vision.
+
+The student should know these exist and roughly what each does. Specific
+sensor models are not the point.
 
 ────────────────────────────────────────────────────────────────────────
-12. PROGRAMMING
+12. PROGRAMMING (GENERAL)
 ────────────────────────────────────────────────────────────────────────
 
-- WPILib is the official robot framework, available in Java, C++, and
-  Python (RobotPy). Java is by far the most common in FRC.
-- The robot code is built with VS Code + the WPILib extension and
-  deployed to the RoboRIO over the network.
-- ROBOT MODES: Disabled, Autonomous, Teleop, Test. Each has a periodic
-  function that runs every 20 ms.
-- COMMAND-BASED PROGRAMMING is the recommended paradigm:
-    * Subsystems wrap hardware (Drivetrain, Intake, Shooter).
-    * Commands are units of behavior (drive forward, run intake until
-      beam-break, score). Commands can be sequenced, paralleled,
-      conditionalised, and composed.
-    * Triggers/Buttons bind commands to inputs.
-- DRIVER STATION: NI/FIRST app on a Windows laptop. Connects to the
-  radio over wired Ethernet at events. Sends enable signals,
-  joystick/controller inputs, and receives diagnostics + battery
-  voltage + match time.
-- COMMON LIBRARIES: PathPlanner / Choreo (trajectory-following auto),
-  YAGSL (swerve), PhotonLib, Limelight Lib, ReduxLib, CTRE Phoenix 6,
-  REVLib.
-- AUTONOMOUS routines typically follow pre-generated paths and trigger
-  scoring actions at waypoints. Modern teams pre-build many short autos
-  selected with a SmartDashboard / Shuffleboard / Elastic chooser.
+- WPILib is the official FRC software framework. Most teams use Java.
+- The robot has DISTINCT MODES — Disabled, Autonomous, Teleop, Test.
+- Modern teams use COMMAND-BASED programming: subsystems wrap hardware
+  (Drivetrain, Intake, Shooter); commands describe behavior (drive
+  forward, run intake, score); commands are bound to buttons.
+- AUTONOMOUS routines usually follow pre-planned paths and trigger
+  scoring at specific points.
+
+The student should understand the modes and the idea of "subsystems and
+commands." They do NOT need to know specific WPILib class names.
 
 ────────────────────────────────────────────────────────────────────────
-13. CONTROLS & DRIVER STATION
+13. CONTROLS AND DRIVER STATION
 ────────────────────────────────────────────────────────────────────────
 
-- Most drive teams use Xbox controllers, Logitech F310s, or custom
-  button boards. Some use thrustmasters / flight sticks.
-- A drive team is up to 5 people: DRIVER, OPERATOR, HUMAN PLAYER,
-  COACH, and TECHNICIAN. The coach is the only one allowed to talk to
-  the other alliance partners outside of brief moments.
-- At events, robots connect to the FIELD MANAGEMENT SYSTEM (FMS) over
-  the venue's wired field network. Practice connections use a home
-  radio in standalone mode.
+- The DRIVE TEAM is a small group (driver, operator, human player, coach,
+  technician) that runs the robot at events.
+- The DRIVER STATION is a laptop running the official FRC software that
+  sends controller inputs to the robot.
+- At competitions, robots connect through the venue's FIELD MANAGEMENT
+  SYSTEM (FMS), which enables/disables them on the official match clock.
 
 ────────────────────────────────────────────────────────────────────────
-14. AWARDS
+14. AWARDS (BIG ONES TO KNOW)
 ────────────────────────────────────────────────────────────────────────
 
-JUDGED (off-field, narrative):
-- IMPACT AWARD (formerly the CHAIRMAN'S AWARD): the most prestigious
-  award in FRC. Recognises the team that best embodies the mission of
-  FIRST and creates the broadest impact on STEM in their community.
-  Winning Impact at any event qualifies the team for Worlds.
-- ENGINEERING INSPIRATION: second to Impact in judging; recognises
-  outreach + a strong engineering program.
-- DEAN'S LIST: 1–2 high-school students per event recognised for
-  outstanding leadership and effect on their team's growth.
-- WOODIE FLOWERS AWARD: recognises an outstanding adult mentor.
-- ROOKIE ALL-STAR / ROOKIE INSPIRATION: for first-year teams.
-- SUB-JUDGED AWARDS rotate: Innovation in Control, Industrial Design,
-  Quality, Creativity, Excellence in Engineering, Imagery, Team
-  Spirit, Gracious Professionalism, Safety.
+- IMPACT AWARD (formerly Chairman's): the highest award in FRC. Goes to
+  the team with the broadest impact on STEM. Winning at an event
+  qualifies a team for the Championship.
+- ENGINEERING INSPIRATION: balances outreach with engineering strength.
+- DEAN'S LIST: per-event award for outstanding student leaders.
+- WOODIE FLOWERS AWARD: outstanding adult mentor.
+- ROOKIE AWARDS: for first-year teams.
 
-ROBOT-PERFORMANCE:
-- WINNERS of the event (the winning alliance — 3 or 4 teams).
-- FINALISTS.
-- HIGHEST ROOKIE SEED / HIGHEST ROOKIE FINISH.
+Plus event winners, finalists, and a rotating set of judged awards.
+
+The student should know that there are *robot* awards and *judged*
+awards, and recognize Impact and the Dean's List by name.
 
 ────────────────────────────────────────────────────────────────────────
 15. CORE VALUES
 ────────────────────────────────────────────────────────────────────────
 
-FIRST has two flagship cultural concepts:
-- GRACIOUS PROFESSIONALISM (Woodie Flowers): "fierce competition and
-  mutual gain are not separate notions." Compete hard, share knowledge,
-  help your opponents.
-- COOPERTITION: cooperation and competition together; usually rewarded
-  by a yearly co-op ranking-point mechanic.
+- GRACIOUS PROFESSIONALISM (Woodie Flowers): compete hard, help your
+  opponents, share what you know.
+- COOPERTITION: cooperation and competition together.
+
+The student should be able to describe what these mean in their own
+words.
 
 ────────────────────────────────────────────────────────────────────────
-16. TEAM ROLES & SUB-TEAMS
+16. TEAM ROLES
 ────────────────────────────────────────────────────────────────────────
 
-Most FRC teams organise into sub-teams that mirror engineering
-disciplines:
+Most teams organize into sub-teams that mirror engineering disciplines:
 
-- MECHANICAL / FABRICATION: machining, fabricating, assembling. Owns
-  the mill, lathe, CNC, drill press, hand tools.
-- ELECTRICAL: wiring, crimping, breakers, PDH, RoboRIO, radio, CAN bus,
-  pneumatics control.
-- PROGRAMMING / SOFTWARE: WPILib robot code, autonomous, vision,
-  driver-station tooling, simulation.
-- CAD / DESIGN: Onshape (most common in FRC), Fusion 360, SolidWorks,
-  Inventor. CAD release process gates manufacturing.
-- DRIVE TEAM: see §13.
-- STRATEGY / SCOUTING: pre-event game analysis, in-event scouting,
-  pick-list construction for alliance selection.
-- BUSINESS / OUTREACH: sponsorship, finances, awards submissions,
-  outreach events, brand/social media.
-- SAFETY CAPTAIN: required at events; runs safety check-ins and
-  represents the team to the Safety Advisor.
+- MECHANICAL / FABRICATION — building the physical robot.
+- ELECTRICAL — wiring, controllers, power.
+- PROGRAMMING — the robot's code.
+- CAD / DESIGN — modeling the robot.
+- DRIVE TEAM — operating it at events.
+- STRATEGY / SCOUTING — game plans and alliance picks.
+- BUSINESS / OUTREACH — sponsorship, awards, social media.
+- SAFETY CAPTAIN — required at events.
+
+The student should know sub-teams exist and roughly what they do.
 
 ────────────────────────────────────────────────────────────────────────
-17. SHOP & SAFETY ESSENTIALS
+17. SHOP SAFETY (BASICS)
 ────────────────────────────────────────────────────────────────────────
 
-- Always wear ANSI Z87.1+ safety glasses in the shop. Closed-toe shoes.
-- Tie back long hair, no loose sleeves or jewellery near rotating
-  machinery.
-- Hearing protection near the CNC mill, router, and any prolonged
-  power-tool use.
-- Lock-out / tag-out before working on the robot's electrical system:
-  unplug the battery and inspect the main breaker.
-- Pneumatics: ALWAYS vent the system to 0 psi before opening any fitting.
-  Verify with the downstream gauge.
-- Lifting the robot: use the cart or two people. The 125-lb robot is
-  awkward and back-injury prone.
+- Safety glasses, closed-toed shoes, hair tied back, no loose sleeves
+  near rotating machinery.
+- Hearing protection near loud tools.
+- Unplug the battery before working inside the robot's electrical system.
+- Vent pneumatic systems to zero pressure before opening any fitting.
 
 ────────────────────────────────────────────────────────────────────────
-18. COMMON FRC TOOLS & PROCESSES
+18. COMMON-SENSE TROUBLESHOOTING
 ────────────────────────────────────────────────────────────────────────
 
-- CAD-FIRST DESIGN: model the robot in Onshape before fabricating.
-  Releases gate cuts.
-- 3D PRINTING: PETG, PLA+, ABS, and ONYX (Markforged) for structural
-  prints. Wheels, intake rollers, hooded shapes are commonly printed.
-- LASER CUTTING: 1/8" or 1/4" polycarbonate for guards and panels.
-- WATERJET / CNC ROUTER: aluminum (6061-T6) plates for structural
-  parts.
-- MILL & LATHE: shafts, spacers, custom fittings.
-- BANDSAW, DRILL PRESS, BELT SANDER: weekly-use tools.
-- HARDWARE STANDARDS: most FRC fasteners are 8-32, 10-32, 1/4-20.
-  Metric is used for some COTS gearboxes (M3, M5) and bearings (5mm,
-  6mm bore IDs).
+The student should be able to talk through what they'd CHECK in common
+failure situations — not recite exact procedures:
+
+- Robot won't enable → check radio / driver station status / battery.
+- A motor doesn't move → check power, breaker, CAN ID, code.
+- Pneumatics won't actuate → check compressor and pressure.
+- Drivetrain pulls to one side → check encoders or a stuck wheel.
+- Brownout (robot temporarily loses power) → battery too discharged or
+  current draw too high; swap battery.
+
+The right answer is the troubleshooting *instinct* — not the exact order
+of steps.
 
 ────────────────────────────────────────────────────────────────────────
-19. COMMON PITFALLS & TROUBLESHOOTING (THINGS THE AI CAN PROBE)
+19. ACRONYMS TO RECOGNIZE (not memorize)
 ────────────────────────────────────────────────────────────────────────
 
-- Robot won't enable: check the radio status LEDs, RoboRIO comms light,
-  and Driver Station status. Usually a network or battery-voltage issue.
-- Motor doesn't spin: check CAN ID, breaker, wire seating in the PDH,
-  and that the motor controller's status light is green (not orange/red).
-- Code deploys but motor jitters: PWM/encoder direction mismatch, PID
-  gains too high, or a damaged encoder cable.
-- Pneumatics won't actuate: compressor not running (check pressure
-  switch), solenoid wired backward, or system never reached 60 psi.
-- Drivetrain pulls to one side: encoder mis-scaling, gyro drift, or a
-  bound wheel/gearbox.
-- Brownout: battery is too discharged, draw is too high, or the main
-  breaker is heat-tripping. Swap battery, check current limits.
+- FRC, FIRST, WPILib, RoboRIO, PDH/PDP, RSL, FMS, DS, COTS, CAN, IMU, RP.
 
 ────────────────────────────────────────────────────────────────────────
-20. NOTABLE TEAMS (USEFUL CULTURAL CONTEXT)
+20. WHAT THE AI SHOULD AVOID ASKING
 ────────────────────────────────────────────────────────────────────────
 
-- 254 (The Cheesy Poofs, Bellarmine Prep, San Jose CA) — historically
-  the most successful FRC team; influential CheesyArbor, CheesyPath,
-  254 swerve, and software releases (PathPlanner ancestors).
-- 148 (Robowranglers, Greenville TX), 118 (Robonauts, NASA JSC),
-  1678 (Citrus Circuits, Davis CA), 2056 (OP Robotics, Ontario),
-  1114 (Simbotics, Ontario), 469 (Las Guerrillas, MI), 33 (Killer Bees,
-  MI), 67 (HOT, GM Tech Center), 971 (Spartan Robotics, Mountain View),
-  6328 (Mechanical Advantage, NH) — well-known top-performers across
-  eras.
-- These are useful as cultural reference points; the AI should not
-  invent achievements or specific years without certainty.
-
-────────────────────────────────────────────────────────────────────────
-21. GLOSSARY (HIGH-FREQUENCY ACRONYMS)
-────────────────────────────────────────────────────────────────────────
-
-- FRC: FIRST Robotics Competition.
-- FIRST: For Inspiration and Recognition of Science and Technology.
-- WPILib: the official FRC software framework.
-- RoboRIO: the FRC robot computer.
-- PDH/PDP: Power Distribution Hub / Panel.
-- VRM/RPM: Voltage Regulator Module / Radio Power Module.
-- RSL: Robot Signal Light.
-- FMS: Field Management System.
-- DS: Driver Station.
-- COTS: Commercial Off-The-Shelf (parts).
-- CAN: Controller Area Network (the robot's main motor-controller bus).
-- IMU: Inertial Measurement Unit (gyro + accelerometer).
-- CIM, NEO, Kraken, Falcon: motor model names.
-- RP: Ranking Point.
-- DCMP: District Championship.
-- IRI: Indiana Robotics Invitational (premier off-season event).
-- Chezy Champs: Bay Area off-season event hosted by 254.
-- Battlecry: New England off-season event.
-- Impact (formerly Chairman's): top judged award.
-
-────────────────────────────────────────────────────────────────────────
-22. WHAT THE AI SHOULD AVOID
-────────────────────────────────────────────────────────────────────────
-
-- Don't quote scoring values, ranking-point thresholds, or field
-  dimensions for THIS year unless they're stated in the file (they
-  change annually).
-- Don't invent specific team accomplishments or year-by-year facts.
-- When unsure, ask the student a conceptual question (subsystems,
-  electrical, programming, safety, FRC culture) rather than a
-  year-specific trivia question.
+- Exact specs (motor torques, breaker amperages, wire gauges, PSI
+  values, exact dimensions).
+- Specific part numbers, model names, or brand-specific terminology.
+- Year-specific scoring values, point totals, or field measurements.
+- Detailed WPILib class names or G-code syntax.
+- Memorized acronym expansions — recognition is fine, recital is not.
+- Anything that feels like a memory test rather than a check on
+  understanding.
 
 ──────────────────────────── END OF FILE ──────────────────────────────

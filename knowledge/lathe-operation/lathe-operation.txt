@@ -1,6 +1,14 @@
 ENGINE LATHE OPERATION
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely get started
+on the lathe. The body below contains specific SFM values, runout numbers,
+rake angles, and tool details — treat those as background for YOU only.
+Do NOT quiz the student on exact specs, formulas, or specific tool
+geometries. Ask about safety, the workholding choice, the order of
+operations, and what could go wrong (chatter, dig-ins, poor finish).
+
 SAFETY REQUIREMENTS
 Eye protection is non-negotiable. Use a chip shield whenever available. Never wear gloves — they catch the chuck and pull your hand in. Tie back long hair and keep hands clear of the rotating chuck. If chips wrap around the work ("bird's nest"), stop before clearing them.
 

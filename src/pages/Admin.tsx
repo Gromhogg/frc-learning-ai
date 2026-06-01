@@ -229,7 +229,7 @@ function ChatLogView({ rawLog }: { rawLog: string }) {
 
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
-type Tab = "overview" | "knowledge" | "roster" | "access" | "settings";
+type Tab = "overview" | "knowledge" | "roster" | "access";
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
   const tabs: { id: Tab; label: string; icon: React.ReactNode }[] = [
@@ -251,12 +251,6 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void 
     { id: "access", label: "Access", icon: (
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-      </svg>
-    )},
-    { id: "settings", label: "Settings", icon: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-        <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
       </svg>
     )},
   ];
@@ -1626,154 +1620,6 @@ function AccessTab({ token, currentRole }: { token: string | null; currentRole: 
   );
 }
 
-// ── Settings tab ─────────────────────────────────────────────────────────────
-
-function SettingsTab() {
-  const [minQuestions, setMinQuestions] = useState<number | null>(null);
-  const [minQInput, setMinQInput] = useState("");
-  const [minCorrect, setMinCorrect] = useState<number | null>(null);
-  const [minCorrectInput, setMinCorrectInput] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("http://localhost:3001/api/admin/settings")
-      .then((r) => r.json() as Promise<Record<string, string>>)
-      .then((data) => {
-        const mq = parseInt(data.minQuestions ?? "3", 10);
-        setMinQuestions(mq);
-        setMinQInput(String(mq));
-        const mc = parseInt(data.minCorrectAnswers ?? "0", 10);
-        setMinCorrect(mc);
-        setMinCorrectInput(String(mc));
-      })
-      .catch(() => setLoadError("Could not load settings."));
-  }, []);
-
-  async function handleSave() {
-    const mq = parseInt(minQInput, 10);
-    const mc = parseInt(minCorrectInput, 10);
-    if (isNaN(mq) || mq < 1 || mq > 20) return;
-    if (isNaN(mc) || mc < 0 || mc > 20) return;
-    setSaving(true);
-    setSaved(false);
-    await Promise.all([
-      fetch("http://localhost:3001/api/admin/settings/minQuestions", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: String(mq) }),
-      }),
-      fetch("http://localhost:3001/api/admin/settings/minCorrectAnswers", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ value: String(mc) }),
-      }),
-    ]);
-    setMinQuestions(mq);
-    setMinCorrect(mc);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  }
-
-  if (loadError) {
-    return <p className="text-sm text-red-400">{loadError}</p>;
-  }
-
-  if (minQuestions === null || minCorrect === null) {
-    return <p className="text-sm text-[var(--text)] animate-pulse">Loading settings…</p>;
-  }
-
-  const parsedMQ = parseInt(minQInput, 10);
-  const parsedMC = parseInt(minCorrectInput, 10);
-  const isMQValid = !isNaN(parsedMQ) && parsedMQ >= 1 && parsedMQ <= 20;
-  const isMCValid = !isNaN(parsedMC) && parsedMC >= 0 && parsedMC <= 20;
-  const isValid = isMQValid && isMCValid;
-  const isDirty = parsedMQ !== minQuestions || parsedMC !== minCorrect;
-
-  return (
-    <div className="max-w-lg space-y-6">
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card-bg)] p-6 space-y-6">
-        <div>
-          <h2 className="text-base font-semibold text-[var(--text-h)]">Session Requirements</h2>
-          <p className="text-sm text-[var(--text)] mt-0.5">Configure how sessions are scored and saved.</p>
-        </div>
-
-        {/* Min questions */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-[var(--text-h)]">
-            Minimum questions to save a session
-          </label>
-          <p className="text-xs text-[var(--text)]">
-            A session won't be saved unless the student answers at least this many questions. Sessions with a score of 0 are always discarded.
-          </p>
-          <div className="flex items-center gap-3 mt-2">
-            <input
-              type="number"
-              min={1}
-              max={20}
-              value={minQInput}
-              onChange={(e) => { setSaved(false); setMinQInput(e.target.value); }}
-              className={[
-                "w-24 rounded-lg border-2 px-3 py-2 text-sm font-semibold bg-[var(--code-bg)] text-[var(--text-h)]",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                isMQValid ? "border-[var(--border)]" : "border-red-500/60",
-              ].join(" ")}
-            />
-            <span className="text-sm text-[var(--text)]">questions (1–20)</span>
-          </div>
-          {!isMQValid && minQInput !== "" && (
-            <p className="text-xs text-red-400">Enter a number between 1 and 20.</p>
-          )}
-        </div>
-
-        {/* Min correct answers */}
-        <div className="space-y-2 border-t border-[var(--border)] pt-5">
-          <label className="text-sm font-medium text-[var(--text-h)]">
-            Minimum correct answers to save a session
-          </label>
-          <p className="text-xs text-[var(--text)]">
-            The student must answer at least this many questions correctly for the session to be saved. Partial credit counts proportionally (e.g. a half-correct answer = 0.5). Set to 0 to disable this gate.
-          </p>
-          <div className="flex items-center gap-3 mt-2">
-            <input
-              type="number"
-              min={0}
-              max={20}
-              value={minCorrectInput}
-              onChange={(e) => { setSaved(false); setMinCorrectInput(e.target.value); }}
-              className={[
-                "w-24 rounded-lg border-2 px-3 py-2 text-sm font-semibold bg-[var(--code-bg)] text-[var(--text-h)]",
-                "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                isMCValid ? "border-[var(--border)]" : "border-red-500/60",
-              ].join(" ")}
-            />
-            <span className="text-sm text-[var(--text)]">correct (0–20)</span>
-          </div>
-          {!isMCValid && minCorrectInput !== "" && (
-            <p className="text-xs text-red-400">Enter a number between 0 and 20.</p>
-          )}
-        </div>
-
-        <button
-          onClick={() => void handleSave()}
-          disabled={saving || !isValid || !isDirty}
-          className={[
-            "px-5 py-2 rounded-lg text-sm font-semibold transition-all duration-150",
-            "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-            saving || !isValid || !isDirty
-              ? "bg-[var(--border)] text-[var(--text)] cursor-not-allowed"
-              : "bg-[var(--accent)] text-white hover:opacity-90",
-          ].join(" ")}
-        >
-          {saving ? "Saving…" : saved ? "Saved ✓" : "Save"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Admin page ───────────────────────────────────────────────────────────
 
 export default function Admin() {
@@ -1906,9 +1752,6 @@ export default function Admin() {
       )}
       {activeTab === "access" && (
         <AccessTab token={token} currentRole={authUser?.role ?? "student"} />
-      )}
-      {activeTab === "settings" && (
-        <SettingsTab />
       )}
     </main>
   );

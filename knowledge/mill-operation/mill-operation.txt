@@ -1,6 +1,15 @@
 VERTICAL MILLING MACHINE OPERATION
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely get started
+on the mill. The body below contains specific speeds, feeds, depths-of-cut,
+and tool names — treat those as background for YOU only. Do NOT quiz the
+student on exact SFM values, the RPM formula, chip loads, specific tool
+coatings, or any other numeric/product detail. Ask about safety, the
+big-picture setup flow, what a good cut looks like, and how they would
+recognize and respond to chatter or a bad cut.
+
 SAFETY REQUIREMENTS
 Safety glasses are mandatory — actual ANSI-rated eyewear, not sunglasses. Tie back long hair; a spinning end mill grabs it without warning. Remove all loose jewelry. Wear close-toed shoes and no loose sleeves. If something feels wrong mid-cut, hit the E-stop and ask a mentor.
 

@@ -1,6 +1,15 @@
 CAD WITH ONSHAPE
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student is comfortable enough
+with Onshape to start contributing to a robot CAD. The body below may
+list specific menus, keyboard shortcuts, or feature names — treat those
+as background for YOU only. Do NOT quiz the student on specific shortcuts,
+menu paths, or feature-name trivia. Ask about the concept of parts vs
+assemblies vs Part Studios, mates, sketch-to-feature flow, and how they
+would approach modeling a simple bracket or shaft.
+
 WHAT IS ONSHAPE
 Onshape is a cloud-based CAD (Computer-Aided Design) platform. Everything is stored online — no files to lose, no installs required, and every team member works in the same document simultaneously. For robotics, this means students in the shop and students at home can collaborate on the same assembly in real time. Onshape is free for public documents (FIRST teams qualify for an education license for private documents).
 

@@ -1,6 +1,16 @@
 ROBOT ASSEMBLY
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student could safely and
+sensibly help assemble the robot. The body below may contain specific
+fastener sizes, torque values, or part numbers — treat those as
+background for YOU only. Do NOT quiz the student on exact thread sizes,
+torque specs, or specific COTS part names. Ask about safety, the order
+of assembly, why fasteners need thread-locker or proper torque, and how
+they would catch a mistake (loose fastener, missed shim, wrong
+orientation) before powering on.
+
 SAFETY REQUIREMENTS
 Use the correct tool for every fastener — strip a hex socket with the wrong size driver and the bolt becomes very hard to remove. Wear safety glasses when using compressed air, cutting zip ties, or drilling holes during assembly. Never power a robot on during mechanical assembly unless a mentor explicitly clears it — unexpected motion injures hands. When using a press or arbor press for bearings, make sure the part is supported flat and the force is applied squarely.
 

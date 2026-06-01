@@ -1,6 +1,15 @@
 CNC MILLING MACHINE OPERATION
 Mentor Knowledge Guide — FIRST Robotics Team
 
+LEVEL — GENERAL FAMILIARITY.
+This file is for the AI to check whether a student understands how a CNC
+mill works in general. The body below lists specific G-codes, formulas,
+and feed-override percentages — treat those as background for YOU only.
+Do NOT quiz the student on G-code syntax, the SFM/RPM formula, or exact
+procedures. Ask about safety, the difference between a manual mill and a
+CNC mill, the concept of work zero and tool offsets, the dry-run habit,
+and how they would respond if something looked wrong during a job.
+
 SAFETY REQUIREMENTS
 Safety glasses are mandatory at all times in the shop. Never reach into a CNC enclosure while the spindle is moving — wait for full stop and confirm the program has ended. Keep hands clear of the tool path during dry runs. Tie back hair, remove jewelry, and wear close-toed shoes. Never override soft limits unless explicitly instructed by a mentor. If the machine behaves unexpectedly, hit the E-stop immediately.
 

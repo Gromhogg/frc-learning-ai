@@ -98,23 +98,8 @@ export default function Chat() {
       const chatLogStr = JSON.stringify(enrichedMessages);
       const questionsAnswered = messages.filter((m) => m.role === 'user').length;
 
-      // Fetch session thresholds from settings
-      let minQuestions = 3;
-      let minCorrectAnswers = 0;
-      try {
-        const settingsRes = await fetch('http://localhost:3001/api/admin/settings');
-        if (settingsRes.ok) {
-          const settingsData = await settingsRes.json() as Record<string, string>;
-          const mq = parseInt(settingsData.minQuestions ?? '3', 10);
-          if (!isNaN(mq)) minQuestions = mq;
-          const mc = parseInt(settingsData.minCorrectAnswers ?? '0', 10);
-          if (!isNaN(mc)) minCorrectAnswers = mc;
-        }
-      } catch {
-        // fall back to defaults
-      }
-
-      if (questionsAnswered < minQuestions) return;
+      // Skip fully-abandoned sessions (no user replies at all).
+      if (questionsAnswered < 1) return;
 
       // Count quiz answers for objective scoring
       let correct = 0;
@@ -131,9 +116,6 @@ export default function Chat() {
       if (total > 0) {
         // Objective scoring: correct quiz answers / total quiz questions
         score = Math.round((correct / total) * 100);
-
-        // Gate on minimum correct answers using real data
-        if (minCorrectAnswers > 0 && correct < minCorrectAnswers) return;
       } else {
         // No quiz widgets used — fall back to AI extraction
         score = 0;
@@ -153,11 +135,6 @@ export default function Chat() {
 
         // Don't save zero-score sessions from AI fallback (likely a failed extraction)
         if (score === 0) return;
-
-        if (minCorrectAnswers > 0) {
-          const estimatedCorrect = (score * questionsAnswered) / 100;
-          if (estimatedCorrect < minCorrectAnswers) return;
-        }
       }
 
       const saveRes = await fetch('http://localhost:3001/api/assessments', {
