@@ -8,6 +8,13 @@
       "when": 1787625011474,
       "tag": "0000_spotty_loa",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1787636464025,
+      "tag": "0001_elite_stature",
+      "breakpoints": true
     }
   ]
 }

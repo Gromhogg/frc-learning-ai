@@ -1,18 +1,25 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "../lib/api";
-
-interface TeamFact {
-  id: number;
-  text: string;
-  mentionCount: number;
-}
+import { api, ApiError } from "../lib/api";
+import {
+  fetchLive,
+  savePrompt as putPrompt,
+  timeAgo,
+  type LivePrompt,
+  type TeamFact,
+} from "../lib/prompt-api";
+import PromptConflict from "../components/prompt-conflict";
+import PromptHistory from "../components/prompt-history";
 
 export default function Prompt() {
   const navigate = useNavigate();
 
   const [prompt, setPrompt] = useState("");
   const [savedPrompt, setSavedPrompt] = useState("");
+  /** The version this editor was loaded from — sent on save to catch stale writes. */
+  const [live, setLive] = useState<LivePrompt | null>(null);
+  const [conflict, setConflict] = useState<LivePrompt | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [facts, setFacts] = useState<TeamFact[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -23,9 +30,10 @@ export default function Prompt() {
   useEffect(() => {
     void (async () => {
       try {
-        const data = await api<{ prompt: string; facts: TeamFact[] }>("/api/prompt");
+        const data = await fetchLive();
         setPrompt(data.prompt);
         setSavedPrompt(data.prompt);
+        setLive(data);
         setFacts(data.facts);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Could not load the prompt.");
@@ -35,14 +43,37 @@ export default function Prompt() {
     })();
   }, []);
 
-  async function savePrompt() {
+  /** Adopt whatever the server says is current, and clear any conflict. */
+  function adopt(next: LivePrompt, text = next.prompt) {
+    setLive(next);
+    setPrompt(text);
+    setSavedPrompt(text);
+    setConflict(null);
+  }
+
+  /**
+   * Save against `baseVersion`. A 409 means someone else got there first —
+   * we surface both texts rather than clobbering theirs.
+   */
+  async function savePrompt(baseVersion?: number) {
+    const base = baseVersion ?? live?.version;
+    if (base === undefined) return;
+
     setSaving(true);
     setStatus(null);
     try {
-      await api("/api/prompt", { method: "PUT", body: JSON.stringify({ prompt }) });
-      setSavedPrompt(prompt);
-      setStatus("Saved. New messages will use these instructions.");
+      const result = await putPrompt(prompt, base);
+      adopt(result, prompt);
+      setStatus(`Saved as v${result.version}. New messages will use these instructions.`);
     } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        const body = err.body as { current?: LivePrompt } | null;
+        if (body?.current) {
+          setConflict(body.current);
+          setStatus(null);
+          return;
+        }
+      }
       setStatus(err instanceof Error ? err.message : "Could not save.");
     } finally {
       setSaving(false);
@@ -81,18 +112,29 @@ export default function Prompt() {
         >
           ← Back to chat
         </button>
-        <button
-          onClick={() => void savePrompt()}
-          disabled={saving || !unsaved}
-          className={[
-            "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
-            saving || !unsaved
-              ? "bg-[var(--border)] text-[var(--text)] cursor-not-allowed"
-              : "bg-[var(--accent)] text-white hover:opacity-90",
-          ].join(" ")}
-        >
-          {saving ? "Saving…" : unsaved ? "Save changes" : "Saved"}
-        </button>
+
+        <div className="flex items-center gap-2">
+          {live && (
+            <button
+              onClick={() => setHistoryOpen(true)}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text)] hover:bg-[var(--code-bg)] hover:text-[var(--text-h)] transition-colors"
+            >
+              v{live.version} · History
+            </button>
+          )}
+          <button
+            onClick={() => void savePrompt()}
+            disabled={saving || !unsaved}
+            className={[
+              "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+              saving || !unsaved
+                ? "bg-[var(--border)] text-[var(--text)] cursor-not-allowed"
+                : "bg-[var(--accent)] text-white hover:opacity-90",
+            ].join(" ")}
+          >
+            {saving ? "Saving…" : unsaved ? "Save changes" : "Saved"}
+          </button>
+        </div>
       </header>
 
       <main className="max-w-3xl mx-auto px-4 py-8">
@@ -106,12 +148,29 @@ export default function Prompt() {
               </p>
             )}
 
+            {conflict && (
+              <PromptConflict
+                theirs={conflict}
+                mine={prompt}
+                busy={saving}
+                onKeepMine={() => void savePrompt(conflict.version)}
+                onTakeTheirs={() => adopt(conflict)}
+                onDismiss={() => setConflict(null)}
+              />
+            )}
+
             <section>
               <h1 className="text-xl font-bold text-[var(--text-h)]">AI instructions</h1>
               <p className="text-sm text-[var(--text)] mt-1.5 leading-relaxed">
                 This is what the AI is told before every conversation. Edit it to change how it
                 answers, what it knows about your shop, or how careful it is about safety.
               </p>
+              {live && (
+                <p className="text-xs text-[var(--text)] mt-1.5">
+                  Version {live.version} · last edited by {live.authorName}{" "}
+                  {timeAgo(live.updatedAt)}
+                </p>
+              )}
 
               <textarea
                 value={prompt}
@@ -197,6 +256,18 @@ export default function Prompt() {
           </>
         )}
       </main>
+
+      {historyOpen && live && (
+        <PromptHistory
+          liveVersion={live.version}
+          onClose={() => setHistoryOpen(false)}
+          onRestored={(restored) => {
+            adopt(restored);
+            setHistoryOpen(false);
+            setStatus(`Restored as v${restored.version}.`);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -52,3 +52,20 @@ export const teamFacts = sqliteTable("team_facts", {
   lastSeenAt: text("last_seen_at").default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
+
+// Every version of the teacher-editable instructions, oldest to newest. The
+// live prompt is simply the highest `version` — nothing is ever updated in
+// place, so an edit can't quietly erase someone else's work, and a rollback
+// appends a new version carrying the old text rather than deleting anything.
+//
+// `authorName` is denormalized on purpose: the history should still read
+// correctly after an account is deleted.
+export const promptVersions = sqliteTable("prompt_versions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  version: integer("version").notNull().unique(),
+  text: text("text").notNull(),
+  authorId: integer("author_id").references(() => users.id),
+  authorName: text("author_name").notNull(),
+  note: text("note"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
