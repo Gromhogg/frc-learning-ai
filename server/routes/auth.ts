@@ -2,35 +2,50 @@ import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
 import { Google, generateState, generateCodeVerifier } from "arctic";
 import bcrypt from "bcryptjs";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { users } from "../../db/schema.ts";
-import { eq, sql } from "drizzle-orm";
 import { signToken } from "../lib/jwt.ts";
+import { getAuth } from "../lib/require-auth.ts";
+import { FRONTEND_URL, SERVER_PORT } from "../lib/config.ts";
 
-const FRONTEND_URL = "http://localhost:5173";
+const app = new Hono();
 
-// Hidden "god" account — the only developer-mode access. Never written to the
-// users table, so it can never appear in any admin/manager listing.
-const GOD_NAME = "Gromhogg";
-const GOD_PASSWORD = "Creeper098&";
+/** Everything except the password hash — never send that to the client. */
+const safeColumns = {
+  id: users.id,
+  name: users.name,
+  email: users.email,
+  avatarUrl: users.avatarUrl,
+  role: users.role,
+  createdAt: users.createdAt,
+};
 
 function getGoogle() {
   return new Google(
     process.env.GOOGLE_CLIENT_ID!,
     process.env.GOOGLE_CLIENT_SECRET!,
-    `http://localhost:3001/auth/google/callback`
+    `http://localhost:${SERVER_PORT}/auth/google/callback`,
   );
 }
 
-const app = new Hono();
+/** True only if a teacher code is configured AND the supplied one matches. */
+function isValidTeacherCode(code: string | undefined): boolean {
+  const expected = process.env.TEACHER_CODE;
+  if (!expected) return false;
+  return typeof code === "string" && code.trim() === expected;
+}
 
-// GET /auth/google — kick off the OAuth flow
+// ── Google sign-in ───────────────────────────────────────────────────────────
+
 app.get("/google", (c) => {
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
-  const google = getGoogle();
-  const url = google.createAuthorizationURL(state, codeVerifier, ["openid", "email", "profile"]);
-  // Force the account-picker every time (not the default account)
+  const url = getGoogle().createAuthorizationURL(state, codeVerifier, [
+    "openid",
+    "email",
+    "profile",
+  ]);
   url.searchParams.set("prompt", "select_account");
 
   setCookie(c, "google_oauth_state", state, { httpOnly: true, path: "/", maxAge: 600, sameSite: "Lax" });
@@ -39,7 +54,6 @@ app.get("/google", (c) => {
   return c.redirect(url.toString());
 });
 
-// GET /auth/google/callback — Google redirects here after login
 app.get("/google/callback", async (c) => {
   const { code, state } = c.req.query();
   const storedState = getCookie(c, "google_oauth_state");
@@ -50,39 +64,27 @@ app.get("/google/callback", async (c) => {
   }
 
   try {
-    const google = getGoogle();
-    const tokens = await google.validateAuthorizationCode(code, codeVerifier);
-    const accessToken = tokens.accessToken();
-
+    const tokens = await getGoogle().validateAuthorizationCode(code, codeVerifier);
     const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: { Authorization: `Bearer ${tokens.accessToken()}` },
     });
-    const googleUser = await res.json() as {
+    const { sub: googleId, name, email, picture } = (await res.json()) as {
       sub: string;
       name: string;
       email: string;
       picture: string;
     };
 
-    const { sub: googleId, name, email, picture } = googleUser;
-
-    // Find or create user — any email is allowed, active immediately
     let [user] = await db.select().from(users).where(eq(users.email, email));
 
     if (!user) {
+      // New Google users always start as students. To become a teacher they
+      // enter the teacher code from inside the app.
       [user] = await db
         .insert(users)
-        .values({
-          name,
-          email,
-          googleId,
-          avatarUrl: picture,
-          status: "approved",
-          role: "student",
-        })
+        .values({ name, email, googleId, avatarUrl: picture, role: "student" })
         .returning();
     } else {
-      // Update name/avatar in case they changed
       [user] = await db
         .update(users)
         .set({ name, avatarUrl: picture, googleId })
@@ -90,60 +92,35 @@ app.get("/google/callback", async (c) => {
         .returning();
     }
 
-    const token = await signToken({
-      userId: user.id,
-      role: user.role as "student" | "admin" | "manager",
-      status: user.status as "pending" | "approved" | "rejected",
-    });
-
-    return c.redirect(
-      `${FRONTEND_URL}/auth/callback?token=${token}&status=${user.status}`
-    );
+    const token = await signToken({ userId: user.id, role: user.role });
+    return c.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
   } catch (err) {
     console.error("OAuth callback error:", err);
     return c.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
   }
 });
 
-// GET /auth/me — return the current user from token
+// ── Who am I ─────────────────────────────────────────────────────────────────
+
 app.get("/me", async (c) => {
-  const authHeader = c.req.header("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) return c.json(null, 401);
+  const auth = await getAuth(c);
+  if (!auth) return c.json(null, 401);
 
-  const { verifyToken } = await import("../lib/jwt.ts");
-  const payload = await verifyToken(authHeader.slice(7));
-  if (!payload) return c.json(null, 401);
-
-  const [user] = await db.select().from(users).where(eq(users.id, payload.userId));
+  const [user] = await db.select(safeColumns).from(users).where(eq(users.id, auth.userId));
   if (!user) return c.json(null, 401);
-  const { passwordHash: _ph, ...safeUser } = user;
-  void _ph;
-  return c.json(safeUser);
+  return c.json(user);
 });
 
-// POST /auth/login — name + password login. First login sets the password.
+// ── Name + password ──────────────────────────────────────────────────────────
+
 app.post("/login", async (c) => {
   const { name, password } = await c.req.json<{ name: string; password: string }>();
   const trimmedName = (name ?? "").trim();
+
   if (!trimmedName || !password) {
     return c.json({ error: "Name and password are required." }, 400);
   }
-  if (password.length < 4) {
-    return c.json({ error: "Password must be at least 4 characters." }, 400);
-  }
 
-  // Hidden developer/god account — checked before any DB lookup. Not stored in
-  // the users table, so it never shows up in any roster or access listing.
-  if (trimmedName === GOD_NAME && password === GOD_PASSWORD) {
-    const token = await signToken({ userId: 0, role: "manager", status: "approved" });
-    return c.json({
-      token,
-      user: { id: 0, name: GOD_NAME, email: "", avatarUrl: null, role: "manager", status: "approved" },
-      firstTime: false,
-    });
-  }
-
-  // Match by name OR email (case-insensitive)
   const identifier = trimmedName.toLowerCase();
   const [user] = await db
     .select()
@@ -153,37 +130,34 @@ app.post("/login", async (c) => {
   if (!user) {
     return c.json({ error: "No account found. Check your details or sign up." }, 401);
   }
-  if (user.status !== "approved") {
-    return c.json({ error: "Account is not approved yet." }, 403);
-  }
 
   let firstTime = false;
 
   if (!user.passwordHash) {
-    // First login — this password becomes theirs
-    const hash = await bcrypt.hash(password, 10);
-    await db.update(users).set({ passwordHash: hash }).where(eq(users.id, user.id));
+    // Account was created via Google — the first password they type becomes theirs.
+    await db
+      .update(users)
+      .set({ passwordHash: await bcrypt.hash(password, 10) })
+      .where(eq(users.id, user.id));
     firstTime = true;
-  } else {
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return c.json({ error: "Incorrect password." }, 401);
+  } else if (!(await bcrypt.compare(password, user.passwordHash))) {
+    return c.json({ error: "Incorrect password." }, 401);
   }
 
-  const token = await signToken({
-    userId: user.id,
-    role: user.role as "student" | "admin" | "manager",
-    status: user.status as "pending" | "approved" | "rejected",
-  });
-
-  // Never return the hash
+  const token = await signToken({ userId: user.id, role: user.role });
   const { passwordHash: _omit, ...safeUser } = user;
   void _omit;
   return c.json({ token, user: safeUser, firstTime });
 });
 
-// POST /auth/register — self-service signup with any email. Active immediately.
 app.post("/register", async (c) => {
-  const { name, email, password } = await c.req.json<{ name: string; email: string; password: string }>();
+  const { name, email, password, teacherCode } = await c.req.json<{
+    name: string;
+    email: string;
+    password: string;
+    teacherCode?: string;
+  }>();
+
   const trimmedName = (name ?? "").trim();
   const trimmedEmail = (email ?? "").trim().toLowerCase();
 
@@ -196,9 +170,12 @@ app.post("/register", async (c) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     return c.json({ error: "Please enter a valid email address." }, 400);
   }
-  // "Gromhogg" is reserved for the hidden developer account.
-  if (trimmedName.toLowerCase() === GOD_NAME.toLowerCase()) {
-    return c.json({ error: "That name is reserved. Please choose another." }, 409);
+
+  // A wrong teacher code is an error, not a quiet downgrade to student —
+  // otherwise a teacher with a typo silently gets the wrong account.
+  const wantsTeacher = typeof teacherCode === "string" && teacherCode.trim().length > 0;
+  if (wantsTeacher && !isValidTeacherCode(teacherCode)) {
+    return c.json({ error: "That teacher code isn't right." }, 400);
   }
 
   const [existing] = await db.select().from(users).where(eq(users.email, trimmedEmail));
@@ -206,7 +183,6 @@ app.post("/register", async (c) => {
     return c.json({ error: "An account with that email already exists." }, 409);
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
   let user;
   try {
     [user] = await db
@@ -214,27 +190,40 @@ app.post("/register", async (c) => {
       .values({
         name: trimmedName,
         email: trimmedEmail,
-        passwordHash,
-        status: "approved",
-        role: "student",
+        passwordHash: await bcrypt.hash(password, 10),
+        role: wantsTeacher ? "teacher" : "student",
       })
       .returning();
   } catch {
     return c.json({ error: "Could not create the account. The email may already be in use." }, 409);
   }
 
-  const token = await signToken({
-    userId: user.id,
-    role: user.role as "student" | "admin" | "manager",
-    status: user.status as "pending" | "approved" | "rejected",
-  });
-
+  const token = await signToken({ userId: user.id, role: user.role });
   const { passwordHash: _omit, ...safeUser } = user;
   void _omit;
   return c.json({ token, user: safeUser, firstTime: false }, 201);
 });
 
-// POST /auth/logout — client just discards the token; this is a no-op
+// ── Becoming a teacher ───────────────────────────────────────────────────────
+
+// The teacher code is the ONLY way to become a teacher. This endpoint covers
+// people who signed in with Google (no signup form to type a code into).
+app.post("/teacher-code", async (c) => {
+  const auth = await getAuth(c);
+  if (!auth) return c.json({ error: "Not signed in." }, 401);
+
+  const { code } = await c.req.json<{ code: string }>();
+  if (!isValidTeacherCode(code)) {
+    return c.json({ error: "That teacher code isn't right." }, 400);
+  }
+
+  await db.update(users).set({ role: "teacher" }).where(eq(users.id, auth.userId));
+
+  const [user] = await db.select(safeColumns).from(users).where(eq(users.id, auth.userId));
+  const token = await signToken({ userId: auth.userId, role: "teacher" });
+  return c.json({ token, user });
+});
+
 app.post("/logout", (c) => c.json({ ok: true }));
 
 export default app;

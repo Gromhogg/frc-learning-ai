@@ -1,281 +1,153 @@
-import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-
-type Mode = "signin" | "signup";
-
-// Flip to true once real Google OAuth credentials are set in the server's .env
-// (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET) and the redirect URI is registered.
-const GOOGLE_ENABLED = false;
-
-interface AuthResponse {
-  token: string;
-  user: {
-    id: number;
-    name: string;
-    email: string | null;
-    avatarUrl: string | null;
-    role: "student" | "admin" | "manager";
-    status: "pending" | "approved" | "rejected";
-  };
-  firstTime: boolean;
-}
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useAuth } from "../context/auth-context";
+import { api, API_BASE } from "../lib/api";
+import type { AuthUser } from "../context/auth-context";
 
 export default function Login() {
-  const { user, loading, setSession } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { user, loading, setSession } = useAuth();
 
-  const params = new URLSearchParams(window.location.search);
-  const error = params.get("error");
-
-  const [mode, setMode] = useState<Mode>("signin");
-  const [nameInput, setNameInput] = useState("");
-  const [emailInput, setEmailInput] = useState("");
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [formError, setFormError] = useState<string | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [teacherCode, setTeacherCode] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Already signed in? Go straight to the chat.
+  useEffect(() => {
+    if (!loading && user) navigate("/", { replace: true });
+  }, [loading, user, navigate]);
 
   useEffect(() => {
-    if (!loading && user) {
-      if (user.status === "approved") {
-        navigate(user.role === "admin" || user.role === "manager" ? "/admin" : "/", { replace: true });
-      } else if (user.status === "pending") {
-        navigate("/pending", { replace: true });
-      }
+    if (searchParams.get("error") === "oauth_failed") {
+      setError("Google sign-in didn't complete. Try again.");
     }
-  }, [user, loading, navigate]);
+  }, [searchParams]);
 
-  function applySession(data: AuthResponse) {
-    setSession(data.token, {
-      id: data.user.id,
-      name: data.user.name,
-      email: data.user.email ?? "",
-      avatarUrl: data.user.avatarUrl,
-      role: data.user.role,
-      status: data.user.status,
-    });
-    // No navigate here — the useEffect above is the single source of routing
-    // truth. It fires when `user` updates with the new (authoritative) role
-    // and sends the student to "/", admin/manager to "/admin". Doing the
-    // navigate here too produced a race when stale prior-session state was
-    // still in context, sometimes routing a student to "/admin".
-  }
-
-  async function handleSubmit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setFormError(null);
+    if (busy) return;
 
-    const trimmedName = nameInput.trim();
-    const trimmedEmail = emailInput.trim();
-
-    if (mode === "signin") {
-      if (!trimmedName) { setFormError("Please enter your name or email."); return; }
-    } else {
-      if (!trimmedName) { setFormError("Please enter your name."); return; }
-      if (!trimmedEmail) { setFormError("Please enter your email."); return; }
-    }
-    if (!password) { setFormError("Please enter your password."); return; }
-
-    setSubmitting(true);
-
-    const endpoint = mode === "signin" ? "/auth/login" : "/auth/register";
-    const body = mode === "signin"
-      ? { name: trimmedName, password }
-      : { name: trimmedName, email: trimmedEmail, password };
-
+    setBusy(true);
+    setError(null);
     try {
-      const res = await fetch(`http://localhost:3001${endpoint}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const body =
+        mode === "signup"
+          ? JSON.stringify({ name, email, password, teacherCode: teacherCode.trim() || undefined })
+          : JSON.stringify({ name, password });
 
-      if (!res.ok) {
-        const { error: msg } = await res.json().catch(() => ({ error: "Something went wrong." })) as { error?: string };
-        setFormError(msg ?? "Something went wrong.");
-        setSubmitting(false);
-        return;
-      }
+      const result = await api<{ token: string; user: AuthUser }>(
+        mode === "signup" ? "/auth/register" : "/auth/login",
+        { method: "POST", body },
+      );
 
-      applySession(await res.json() as AuthResponse);
-    } catch {
-      setFormError("Could not reach the server. Make sure it is running on port 3001.");
-      setSubmitting(false);
+      setSession(result.token, result.user);
+      navigate("/", { replace: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
     }
   }
 
-  function switchMode(next: Mode) {
-    setMode(next);
-    setFormError(null);
-    setPassword("");
-  }
-
-  function signInWithGoogle() {
-    window.location.href = "http://localhost:3001/auth/google";
-  }
+  const inputClass =
+    "w-full rounded-xl border-2 border-[var(--border)] bg-[var(--code-bg)] px-4 py-2.5 text-sm text-[var(--text-h)] placeholder:text-[var(--text)] hover:border-[var(--accent-border)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-colors";
 
   return (
-    <main className="flex flex-col flex-1 items-center justify-start min-h-screen bg-[var(--bg)] px-4 pt-[15vh]">
+    <main className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
       <div className="w-full max-w-sm">
-        {/* Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center gap-2 mb-4 px-3 py-1 rounded-full border border-[var(--accent-border)] bg-[var(--accent-bg)] text-xs font-semibold tracking-widest uppercase text-[var(--accent)]">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="3"/>
-              <path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/>
-              <path d="M12 2v2M12 20v2M2 12h2M20 12h2"/>
-            </svg>
-            <span>972 Iron Claw</span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-[var(--text-h)]">
-            FRC Knowledge Assessment
-          </h1>
+          <h1 className="text-2xl font-bold text-[var(--text-h)]">Robotics Chat</h1>
           <p className="text-sm text-[var(--text)] mt-2">
-            {mode === "signin" ? "Sign in to begin your session." : "Create an account to get started."}
+            Ask anything about FRC, the shop, or the robot.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] px-6 py-7 flex flex-col gap-5 shadow-xl">
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-6">
+          <a
+            href={`${API_BASE}/auth/google`}
+            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl border-2 border-[var(--border)] text-sm font-semibold text-[var(--text-h)] hover:border-[var(--accent-border)] transition-colors"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.65l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.11a6.6 6.6 0 0 1 0-4.22V7.05H2.18a11 11 0 0 0 0 9.9l3.66-2.84z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1a11 11 0 0 0-9.82 6.05l3.66 2.84C6.71 7.29 9.14 5.38 12 5.38z" />
+            </svg>
+            Continue with Google
+          </a>
 
-          {/* Sign in / Sign up toggle */}
-          <div className="flex p-1 rounded-xl bg-[var(--bg)] border border-[var(--border)]">
-            {(["signin", "signup"] as Mode[]).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => switchMode(m)}
-                className={[
-                  "flex-1 py-2 rounded-lg text-sm font-semibold transition-colors duration-150",
-                  mode === m
-                    ? "bg-[var(--accent)] text-white"
-                    : "text-[var(--text)] hover:text-[var(--text-h)]",
-                ].join(" ")}
-              >
-                {m === "signin" ? "Sign In" : "Sign Up"}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 my-5">
+            <span className="flex-1 h-px bg-[var(--border)]" />
+            <span className="text-xs text-[var(--text)]">or</span>
+            <span className="flex-1 h-px bg-[var(--border)]" />
           </div>
 
-          {/* Google error banner */}
-          {GOOGLE_ENABLED && error === "oauth_failed" && (
-            <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
-              Google sign-in failed. Please try again.
-            </div>
-          )}
+          <form onSubmit={submit} className="flex flex-col gap-3">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={mode === "signup" ? "Your name" : "Name or email"}
+              className={inputClass}
+            />
 
-          {/* Manual sign-in form */}
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {/* Name input */}
-            <div>
-              <label htmlFor="name-input" className="block text-xs font-semibold uppercase tracking-widest text-[var(--text)] mb-2">
-                {mode === "signin" ? "Name or Email" : "Your Name"}
-              </label>
+            {mode === "signup" && (
               <input
-                id="name-input"
-                type="text"
-                value={nameInput}
-                onChange={(e) => { setNameInput(e.target.value); setFormError(null); }}
-                placeholder={mode === "signin" ? "Type your name or email" : "Type your name"}
-                autoComplete={mode === "signin" ? "username" : "name"}
-                autoCapitalize={mode === "signin" ? "none" : "words"}
-                spellCheck={false}
-                className={[
-                  "w-full rounded-xl border-2 px-4 py-2.5 text-sm font-medium",
-                  "bg-[var(--card-bg)] text-[var(--text-h)]",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                  "transition-colors duration-150 placeholder:text-[var(--text)] placeholder:opacity-40",
-                  nameInput.trim()
-                    ? "border-[var(--accent)] bg-[var(--accent-bg)]"
-                    : "border-[var(--border)] hover:border-[var(--accent-border)]",
-                ].join(" ")}
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Email"
+                className={inputClass}
               />
-            </div>
+            )}
 
-            {/* Email input — sign up only */}
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+              className={inputClass}
+            />
+
             {mode === "signup" && (
               <div>
-                <label htmlFor="email-input" className="block text-xs font-semibold uppercase tracking-widest text-[var(--text)] mb-2">
-                  Email
-                </label>
                 <input
-                  id="email-input"
-                  type="email"
-                  value={emailInput}
-                  onChange={(e) => { setEmailInput(e.target.value); setFormError(null); }}
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className={[
-                    "w-full rounded-xl border-2 px-4 py-2.5 text-sm font-medium",
-                    "bg-[var(--card-bg)] text-[var(--text-h)]",
-                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                    "transition-colors duration-150 placeholder:text-[var(--text)] placeholder:opacity-40",
-                    emailInput.trim()
-                      ? "border-[var(--accent)] bg-[var(--accent-bg)]"
-                      : "border-[var(--border)] hover:border-[var(--accent-border)]",
-                  ].join(" ")}
+                  type="password"
+                  value={teacherCode}
+                  onChange={(e) => setTeacherCode(e.target.value)}
+                  placeholder="Teacher code (optional)"
+                  className={inputClass}
                 />
+                <p className="text-xs text-[var(--text)] mt-1.5 px-1">
+                  Leave blank if you're a student.
+                </p>
               </div>
             )}
 
-            {/* Password */}
-            <div>
-              <label htmlFor="password" className="block text-xs font-semibold uppercase tracking-widest text-[var(--text)] mb-2">
-                Password
-              </label>
-              <input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); setFormError(null); }}
-                placeholder="Enter password"
-                autoComplete={mode === "signin" ? "current-password" : "new-password"}
-                className={[
-                  "w-full rounded-xl border-2 px-4 py-2.5 text-sm font-medium",
-                  "bg-[var(--card-bg)] text-[var(--text-h)]",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-                  "transition-colors duration-150 placeholder:text-[var(--text)] placeholder:opacity-40",
-                  formError && password ? "border-red-500/60" : "border-[var(--border)] hover:border-[var(--accent-border)]",
-                ].join(" ")}
-              />
-            </div>
-
-            {formError && <p className="text-xs text-red-400 -mt-2">{formError}</p>}
+            {error && <p className="text-xs text-red-400 px-1">{error}</p>}
 
             <button
               type="submit"
-              disabled={submitting}
-              className="w-full py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-bold hover:opacity-85 disabled:opacity-40 transition-opacity"
+              disabled={busy}
+              className="w-full px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
             >
-              {submitting ? "Please wait…" : mode === "signin" ? "Sign In" : "Create Account"}
+              {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
             </button>
           </form>
 
-          {/* Divider + Google button — hidden until OAuth credentials are configured */}
-          {GOOGLE_ENABLED && (
-            <>
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-px bg-[var(--border)]" />
-                <span className="text-xs text-[var(--text)] opacity-50 font-medium">or</span>
-                <div className="flex-1 h-px bg-[var(--border)]" />
-              </div>
-
-              <button
-                onClick={signInWithGoogle}
-                className="w-full flex items-center justify-center gap-3 py-2.5 px-4 rounded-xl border-2 border-[var(--border)] bg-white text-gray-800 font-semibold text-sm hover:border-[var(--accent)] hover:shadow-md transition-all duration-150"
-              >
-                <svg width="18" height="18" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
-                  <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
-                  <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
-                  <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
-                  <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
-                  <path fill="none" d="M0 0h48v48H0z"/>
-                </svg>
-                Sign in with Google
-              </button>
-            </>
-          )}
+          <button
+            onClick={() => {
+              setMode(mode === "signin" ? "signup" : "signin");
+              setError(null);
+            }}
+            className="w-full mt-4 text-xs text-[var(--text)] hover:text-[var(--accent)] transition-colors"
+          >
+            {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+          </button>
         </div>
       </div>
     </main>

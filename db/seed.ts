@@ -1,80 +1,23 @@
-import { db } from "./index";
-import { users, topics, assessments } from "./schema";
+import "../server/lib/env.ts";
+import { eq } from "drizzle-orm";
+import { db } from "./index.ts";
+import { settings } from "./schema.ts";
+import { DEFAULT_SYSTEM_PROMPT } from "../server/lib/default-prompt.ts";
+import { PROMPT_KEY } from "../server/lib/prompt.ts";
 
+// Seeds the one row the app needs to start: the default AI instructions.
+// No users are created — the first person to sign up with the teacher code
+// becomes the teacher.
 async function seed() {
-  // Clear tables in dependency order
-  await db.delete(assessments);
-  await db.delete(users);
-  await db.delete(topics);
+  const [existing] = await db.select().from(settings).where(eq(settings.key, PROMPT_KEY));
 
-  // Seed users
-  const teamMembers = [
-    { name: "Alex Rivera" },
-    { name: "Jordan Chen" },
-    { name: "Maya Patel" },
-    { name: "Ethan Brooks" },
-    { name: "Sophia Nguyen" },
-    { name: "Marcus Johnson" },
-    { name: "Lily Okonkwo" },
-    { name: "Daniel Kim" },
-    { name: "Priya Sharma" },
-    { name: "Tyler Hernandez" },
-  ];
+  if (existing) {
+    console.log("System prompt already set — leaving it alone.");
+    return;
+  }
 
-  await db.insert(users).values(teamMembers);
-
-  // Seed topics
-  const topicData = [
-    {
-      name: "Mill Operation",
-      slug: "mill-operation",
-      filePath: "knowledge/mill-operation/mill-operation.txt",
-    },
-    {
-      name: "Lathe Operation",
-      slug: "lathe-operation",
-      filePath: "knowledge/lathe-operation/lathe-operation.txt",
-    },
-    {
-      name: "CNC Mill",
-      slug: "cnc-mill",
-      filePath: "knowledge/cnc-mill/cnc-mill.txt",
-    },
-    {
-      name: "CNC Router",
-      slug: "cnc-router",
-      filePath: "knowledge/cnc-router/cnc-router.txt",
-    },
-    {
-      name: "Waterjet",
-      slug: "waterjet",
-      filePath: "knowledge/waterjet/waterjet.txt",
-    },
-    {
-      name: "CAD (Onshape)",
-      slug: "cad-onshape",
-      filePath: "knowledge/cad-onshape/cad-onshape.txt",
-    },
-    {
-      name: "CAM",
-      slug: "cam",
-      filePath: "knowledge/cam/cam.txt",
-    },
-    {
-      name: "Assembly",
-      slug: "assembly",
-      filePath: "knowledge/assembly/assembly.txt",
-    },
-  ];
-
-  await db.insert(topics).values(topicData);
-
-  console.log("Seed complete:");
-  console.log(`  - ${teamMembers.length} users inserted`);
-  console.log(`  - ${topicData.length} topics inserted`);
+  await db.insert(settings).values({ key: PROMPT_KEY, value: DEFAULT_SYSTEM_PROMPT });
+  console.log("Seeded the default system prompt.");
 }
 
-seed().catch((err) => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-});
+seed();

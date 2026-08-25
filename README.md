@@ -1,138 +1,116 @@
-# Learning App — FRC Knowledge Assessment
+# Robotics Chat
 
-An AI-mentor learning app for FRC robotics teams. Each student picks a topic
-(mill operation, lathe, CAD, electrical, general FRC knowledge, …), an AI
-mentor runs a short 10-question check using interactive widgets (quizzes,
-checklists, drag-order, branching scenarios, code editors, labeled
-diagrams), then scores the session and stores the transcript for an admin
-to review.
+A chat app for FRC robotics teams. Students ask questions about the shop,
+the robot, wiring, CAD, or the game — in text or by sending a photo — and an
+AI mentor answers. Past chats are saved in a sidebar.
+
+There are two kinds of people:
+
+- **Students** — chat, and that's it.
+- **Teachers** — chat, *and* can edit the instructions the AI follows.
+
+Teachers cannot read student conversations. The only thing on the teacher
+side is the prompt.
+
+**The app learns your team.** As people chat, it quietly picks up facts about
+*your* specific robot and shop — "the drivetrain uses REV NEO motors", "the
+Avid is the CNC router" — and adds them to the AI's instructions. So when
+someone later asks "what's wrong with the motor?", the AI knows which motor
+they mean. Teachers can see and delete these on the prompt page.
 
 Built with:
 - **Frontend** — React 19 + Vite + Tailwind + react-router (`src/`)
 - **Backend** — Hono + Node, served via `tsx` (`server/`)
 - **Database** — SQLite via better-sqlite3 + Drizzle ORM (`db/`)
 - **AI** — Anthropic Claude (via `@ai-sdk/anthropic` + Vercel AI SDK v6)
-- **Auth** — JWT (jose) + bcrypt password hashes; optional Google OAuth (arctic)
+- **Auth** — JWT (jose) + bcrypt password hashes, plus Google sign-in (arctic)
 
 ---
 
 ## 👋 Never set up a coding project before? Start here.
 
-Don't worry — you don't need to know how any of the tech jargon above works
-to run this app. Follow these steps and you'll be up and running. The
-**technical Quick Start** further down is the same thing, just shorter and
-without explanations.
+You don't need to understand any of the jargon above to run this. Follow
+these steps. (The **Quick start** further down is the same thing, shorter.)
 
 ### What you'll need
 
 1. **A computer** running macOS, Windows, or Linux.
-2. **Node.js** — this is the program that runs the app on your computer.
-   Go to <https://nodejs.org> and download the version labeled "LTS"
-   (Long-Term Support). Install it like any normal app — click through
-   the installer.
-3. **A Terminal** — this is the text-based window where you'll type
-   commands.
+2. **Node.js** — the program that runs the app. Get the "LTS" version from
+   <https://nodejs.org> and install it like any normal app.
+3. **A Terminal** — the text window where you type commands.
    - **Mac:** press <kbd>⌘ Space</kbd>, type "Terminal", press Enter.
-   - **Windows:** press the Start button, type "Terminal" or "PowerShell",
-     press Enter.
-4. **An Anthropic API key** — this is what lets the AI mentor work. It
-   costs money per use (usually pennies per session), so this is your
-   account, not a shared one.
-   - Go to <https://console.anthropic.com> and create an account.
-   - Add some credit (a few dollars is plenty to start).
-   - Go to **Settings → API Keys** and create a new key. Copy it
-     somewhere safe — it starts with `sk-ant-…`.
+   - **Windows:** press Start, type "Terminal" or "PowerShell", press Enter.
+4. **An Anthropic API key** — this is what makes the AI work. It costs money
+   per use (usually pennies per conversation), billed to your account.
+   - Sign up at <https://console.anthropic.com>.
+   - Add some credit — a few dollars goes a long way.
+   - Under **Settings → API Keys**, create a key and copy it. It starts
+     with `sk-ant-…`.
 
-That's it. You don't need a code editor unless you want to look at the
-code yourself.
+### Step by step
 
-### Step-by-step (with explanations)
+Copy-paste one command at a time, pressing <kbd>Enter</kbd> after each and
+waiting for it to finish.
 
-Open your Terminal and copy-paste each command one at a time. Press
-<kbd>Enter</kbd> after each line and wait for it to finish before doing
-the next.
-
-**1. Download the app to your computer.**
+**1. Download the app.**
 ```bash
 git clone https://github.com/Gromhogg/Learning-App.git
 ```
-This downloads the whole project into a new folder called `Learning-App`
-in whatever folder your Terminal is currently in. (If you don't have
-`git` installed, get it from <https://git-scm.com/downloads>. Mac and
-Linux usually have it already.)
 
-**2. Move into that folder.**
+**2. Move into the folder.**
 ```bash
 cd Learning-App
 ```
-`cd` means "change directory" — i.e. open this folder in the Terminal.
+`cd` means "change directory" — it opens that folder in the Terminal.
 
-**3. Install the libraries the app depends on.**
+**3. Install the pieces the app depends on.**
 ```bash
 npm install
 ```
-This downloads a bunch of small helper packages. It takes a minute or two
-and prints a lot of text — that's normal. As long as it doesn't say
-"ERROR" in red at the end, you're fine.
+This prints a lot of text and takes a minute. That's normal.
 
-**4. Set up your secret settings file.**
+**4. Create your settings file.**
 ```bash
 cp .env.example .env
 ```
-This makes a copy of the template settings file. Now open the new `.env`
-file and fill in your real values.
+Now open the new `.env` file and fill it in.
+- On **Mac**: `open -e .env`
+- On **Windows**: `notepad .env`
 
-- On **Mac**, you can open it with: `open -e .env`
-- On **Windows**, you can open it with: `notepad .env`
+Three lines matter:
+- `ANTHROPIC_API_KEY=` — paste your `sk-ant-…` key here.
+- `JWT_SECRET=` — type a long random string of letters and numbers. It
+  doesn't matter what, as long as it's long and you keep it private.
+- `TEACHER_CODE=` — make up a code. Anyone who types this becomes a
+  teacher, so only give it to mentors.
 
-You need to change these two lines:
-- `ANTHROPIC_API_KEY=your_key_here` → paste your `sk-ant-…` key after the `=`.
-- `JWT_SECRET=change-this-to-a-long-random-string` → just type a long random
-  string of letters and numbers (it doesn't matter what, as long as it's
-  long and you don't share it).
+You can leave the two `GOOGLE_` lines alone — the app works fine without
+Google sign-in.
 
-You can leave `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` as their
-placeholder values — the app works without Google sign-in.
-
-Save the file and close it.
+Save and close.
 
 **5. Set up the database.**
 ```bash
 npm run db:migrate
-```
-This creates the file that stores users, topics, and assessments. You
-only need to do this once.
-
-```bash
 npm run db:seed
 ```
-*(Optional.)* This adds some pretend students and the FRC topics so you
-have something to play with right away. Skip it if you'd rather start
-empty.
+The first creates the file that stores accounts and chats. The second loads
+the AI's starting instructions. You only do this once.
 
-**6. Run the app!**
+**6. Run it.**
 ```bash
 npm run dev:all
 ```
-This starts the app. Leave this Terminal window open — closing it stops
-the app.
+Leave this Terminal window open — closing it stops the app. When you see
+`Local: http://localhost:5173`, open that address in your browser.
 
-When you see something like `Server running at http://localhost:3001` and
-`Local: http://localhost:5173`, open your web browser and visit
-<http://localhost:5173>.
+**7. Make your account.**
+Click **Create an account**. If you're a mentor, put your teacher code in
+the "Teacher code" box. Students leave it blank.
 
-**7. Sign in.**
-- Click **Sign Up**, enter a name, email, and password. That account is
-  yours, immediately active.
-- To use the manager/admin features (Knowledge Base editing, Access tab,
-  etc.) sign in as the manager account — see `server/routes/auth.ts` if
-  you're the owner.
-
-To stop the app: come back to the Terminal and press
-<kbd>Control</kbd> + <kbd>C</kbd>.
-
-To run it again next time: open Terminal, `cd Learning-App`, and run
-`npm run dev:all` again. Steps 1–5 only happen once.
+To stop the app, come back to the Terminal and press
+<kbd>Control</kbd> + <kbd>C</kbd>. To run it again later, just `cd
+Learning-App` and `npm run dev:all` — steps 1–5 only happen once.
 
 ---
 
@@ -144,54 +122,75 @@ Prerequisites: **Node 20+** and **npm**.
 git clone https://github.com/Gromhogg/Learning-App.git
 cd Learning-App
 npm install
+cp .env.example .env      # fill in ANTHROPIC_API_KEY, JWT_SECRET, TEACHER_CODE
+npm run db:migrate        # creates data/app.db
+npm run db:seed           # loads the default system prompt
+npm run dev:all           # frontend :5173 + API :3001
 ```
 
-### 1. Configure environment
+Optional: set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` to enable the
+Google button, with redirect URI `http://localhost:3001/auth/google/callback`.
 
-Copy the example and fill in your own values:
+`data/` is gitignored — the database and uploaded photos stay on your machine.
 
-```bash
-cp .env.example .env
+> **Note:** if `npm run db:migrate` fails with `NODE_MODULE_VERSION`, your
+> Node version changed since `npm install`. Run `npm rebuild better-sqlite3`.
+
+---
+
+## Roles
+
+Two roles, and the teacher code is the only way to get the second one.
+
+| | Student | Teacher |
+| --- | --- | --- |
+| Chat, send photos, keep history | ✅ | ✅ |
+| Edit the AI's instructions | ❌ | ✅ |
+| Review learned team facts | ❌ | ✅ |
+| Read anyone else's chats | ❌ | ❌ |
+
+Becoming a teacher:
+- **At signup** — type the code into the "Teacher code" box.
+- **Afterwards** — click your name in the top right → **Enter teacher code**.
+  (This is how Google sign-in users do it, since there's no signup form.)
+
+---
+
+## How the learning loop works
+
+After each reply, a background call looks at the exchange and pulls out any
+durable, team-specific facts — hardware brands, tool names, local shorthand.
+It runs *after* the student already has their answer, so it never slows the
+chat down, and a failure is logged without affecting anything.
+
+Facts are stored in the `team_facts` table with a mention count, and appended
+to the system prompt under a `TEAM CONTEXT` heading on every request. They
+apply immediately and teachers prune them on the prompt page. The list is
+capped at 60 (`MAX_TEAM_FACTS` in `server/lib/config.ts`) so it can't grow
+until it crowds out the actual instructions.
+
+The extractor is told to return nothing most of the time — it's meant to
+catch the occasional real fact, not to narrate every conversation.
+
+---
+
+## Choosing a model
+
+Both models live in `server/lib/config.ts`:
+
+```ts
+export const CHAT_MODEL  = "claude-opus-5";   // answers students
+export const LEARN_MODEL = "claude-opus-5";   // background fact extraction
 ```
 
-Required:
-- `ANTHROPIC_API_KEY` — get one from <https://console.anthropic.com>. Without
-  this the chat sessions will not work (everything else still runs).
-- `JWT_SECRET` — any long random string (e.g. `openssl rand -hex 32`).
+| Model | Input / output per million tokens |
+| --- | --- |
+| `claude-opus-5` | $5 / $25 |
+| `claude-sonnet-5` | $3 / $15 |
+| `claude-haiku-4-5` | $1 / $5 |
 
-Optional:
-- `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` — for the "Sign in with Google"
-  button. Without these, email/password signup still works. The button is
-  hidden via a flag in `src/pages/Login.tsx` (`GOOGLE_ENABLED`); flip to
-  `true` after setting up an OAuth client with the redirect URI
-  `http://localhost:3001/auth/google/callback`.
-
-### 2. Set up the database
-
-```bash
-npm run db:migrate     # creates data/app.db and applies all migrations
-npm run db:seed        # optional — adds 10 demo students + 8 demo topics
-```
-
-The DB lives at `data/app.db` and is **gitignored** — each install gets its
-own.
-
-### 3. Run the app
-
-```bash
-npm run dev:all        # runs frontend (http://localhost:5173) + API (http://localhost:3001)
-```
-
-Then open **<http://localhost:5173>**.
-
-### 4. Sign in
-
-- **Self sign-up** — click "Sign Up" on the login page. Any email works.
-  New accounts are activated immediately as `student`.
-- **Manager account** — see `server/routes/auth.ts` for the hardcoded
-  god/dev login. Use it sparingly; it bypasses all role checks.
-- Admins/managers can promote, demote, or remove other users from the
-  **Access** tab in the admin dashboard.
+For a big team, switching `LEARN_MODEL` to `claude-haiku-4-5` cuts cost with
+no real downside — it's a small extraction task.
 
 ---
 
@@ -201,12 +200,12 @@ Then open **<http://localhost:5173>**.
 | --- | --- |
 | `npm run dev` | Frontend only (Vite on 5173) |
 | `npm run server` | Backend only (Hono/tsx on 3001) |
-| `npm run dev:all` | Both, concurrently — usual command |
-| `npm run build` | Type-check + production build of the frontend |
-| `npm run db:generate` | Generate a new Drizzle migration from `db/schema.ts` |
-| `npm run db:migrate` | Apply migrations to `data/app.db` |
-| `npm run db:seed` | Reset & re-seed the DB with demo data |
+| `npm run dev:all` | Both, concurrently — the usual command |
+| `npm run build` | Type-check + production build |
 | `npm run lint` | Run ESLint |
+| `npm run db:generate` | Generate a migration from `db/schema.ts` |
+| `npm run db:migrate` | Apply migrations to `data/app.db` |
+| `npm run db:seed` | Load the default system prompt |
 
 ---
 
@@ -214,70 +213,24 @@ Then open **<http://localhost:5173>**.
 
 ```
 src/                   React frontend
-  pages/               Top-level routes (Login, Topics, Chat, Admin, …)
-  components/          Widgets used inside chat sessions
-  context/             Auth + Mode providers
+  pages/               Login, Chat (the app), Prompt (teachers), AuthCallback
+  components/          Sidebar, message thread, composer, teacher-code dialog
+  context/             Auth provider and hook
+  lib/                 API helper, client-side image resizing
 server/                Hono API
-  routes/              auth, users, topics, assessments, chat, ask, admin
-  lib/                 jwt, knowledge, ai (system prompt builder), env
+  routes/              auth, chat, conversations, prompt, uploads
+  lib/                 config, prompt builder, learning loop, uploads, jwt
 db/                    Drizzle schema, migration runner, seed script
-drizzle/               Generated migrations (SQL + meta)
-knowledge/             Per-topic source-of-truth text files the AI reads
-data/                  SQLite DB lives here (gitignored)
+drizzle/               Generated migrations
+data/                  SQLite DB + uploaded photos (gitignored)
 ```
 
 ---
 
-## Adding or editing topics
+## Editing what the AI knows
 
-1. Sign in as an admin/manager and open **Admin → Knowledge Base**, **+ Add
-   Topic**. Filled-in content lives at
-   `knowledge/<slug>/<slug>.txt` and is editable inline.
-2. Or edit the `.txt` file directly on disk — changes take effect on the
-   next chat session (no restart needed).
-
-The AI mentor reads the entire knowledge file for the current topic on
-every session, plus the student's name and past-assessment history, so
-question difficulty and tone adapt automatically.
-
----
-
-## Troubleshooting
-
-**The browser says "This site can't be reached" / "Could not reach the
-server."** — Is the Terminal window still open and showing
-`Server running at http://localhost:3001`? If you closed it, run
-`npm run dev:all` again. Also make sure nothing else on your machine is
-already using port 3001.
-
-**Google sign-in shows `invalid_client`** — the placeholder
-`GOOGLE_CLIENT_ID` in `.env` isn't a real client. Either follow step 1 to
-add real OAuth credentials, or leave `GOOGLE_ENABLED = false` and use
-email/password signup.
-
-**The AI mentor never responds / a chat session shows an error.** —
-Almost always a missing or invalid `ANTHROPIC_API_KEY` in `.env`. Open
-`.env`, make sure the key starts with `sk-ant-` and there are no extra
-quotes or spaces around it. Also check your account at
-<https://console.anthropic.com> has credit.
-
-**Browser shows nothing at `http://localhost:5173`.** — Wait 10–15
-seconds after running `npm run dev:all`; the first start is slow. If it
-still shows nothing, check the Terminal for red error text.
-
-**"command not found: npm"** — Node.js isn't installed (or your Terminal
-hasn't picked it up yet). Reinstall from <https://nodejs.org>, then close
-and reopen your Terminal window.
-
-**"command not found: git"** — Install Git from
-<https://git-scm.com/downloads>, then reopen Terminal.
-
-**`SQLITE_CONSTRAINT_FOREIGNKEY` when removing a user** — fixed already.
-Both `DELETE /api/users/:id` and `POST /api/admin/users/:id/remove`
-clear the user's assessment rows first.
-
----
-
-## License
-
-Private. Built for Team 972 Iron Claw.
+Sign in as a teacher and click **Prompt**. Everything the AI is told lives in
+that one text box, including the shop reference section (mill, lathe, CNC,
+waterjet, CAM, CAD, assembly, wiring, FRC basics). Edit it however you like —
+changes apply to the next message. Below it, **Team knowledge** lists what the
+app has learned on its own.

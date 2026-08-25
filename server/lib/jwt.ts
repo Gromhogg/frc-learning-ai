@@ -1,31 +1,28 @@
 import { SignJWT, jwtVerify } from "jose";
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "dev-secret-please-set-JWT_SECRET-in-env"
-);
+export type Role = "student" | "teacher";
 
-export interface SessionPayload {
+export interface TokenPayload {
   userId: number;
-  role: "student" | "admin" | "manager";
-  status: "pending" | "approved" | "rejected";
+  role: Role;
 }
 
-export async function signToken(payload: SessionPayload): Promise<string> {
+function secret(): Uint8Array {
+  return new TextEncoder().encode(process.env.JWT_SECRET ?? "dev-secret-change-me");
+}
+
+export async function signToken(payload: TokenPayload): Promise<string> {
   return new SignJWT({ ...payload })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
-    .setExpirationTime("7d")
-    .sign(secret);
+    .setExpirationTime("30d")
+    .sign(secret());
 }
 
-export async function verifyToken(token: string): Promise<SessionPayload | null> {
+export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, secret);
-    return {
-      userId: payload.userId as number,
-      role: payload.role as "student" | "admin" | "manager",
-      status: payload.status as "pending" | "approved" | "rejected",
-    };
+    const { payload } = await jwtVerify(token, secret());
+    return { userId: payload.userId as number, role: payload.role as Role };
   } catch {
     return null;
   }

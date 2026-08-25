@@ -1,40 +1,30 @@
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
-import type { AuthUser } from "../context/AuthContext";
+import { useAuth } from "../context/auth-context";
+import type { AuthUser } from "../context/auth-context";
+import { API_BASE } from "../lib/api";
 
+/** Where Google sends people back to after they sign in. */
 export default function AuthCallback() {
   const { setSession } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const token = params.get("token");
-    const status = params.get("status");
+    const token = new URLSearchParams(window.location.search).get("token");
 
     if (!token) {
       navigate("/login?error=oauth_failed", { replace: true });
       return;
     }
 
-    // Fetch full user info from the backend using the token
-    fetch("http://localhost:3001/auth/me", {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
+    fetch(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("bad token"))))
       .then((user: AuthUser) => {
         setSession(token, user);
-        if (status === "pending") {
-          navigate("/pending", { replace: true });
-        } else if (user.role === "admin" || user.role === "manager") {
-          navigate("/admin", { replace: true });
-        } else {
-          navigate("/", { replace: true });
-        }
+        navigate("/", { replace: true });
       })
-      .catch(() => {
-        navigate("/login?error=oauth_failed", { replace: true });
-      });
+      .catch(() => navigate("/login?error=oauth_failed", { replace: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

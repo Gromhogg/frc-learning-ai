@@ -1,254 +1,114 @@
-import { Hono } from 'hono';
-import { streamText, tool, jsonSchema, convertToModelMessages } from 'ai';
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { eq } from 'drizzle-orm';
-import { db } from '../../db/index.ts';
-import { topics, assessments, users } from '../../db/schema.ts';
-import { loadKnowledgeFile } from '../lib/knowledge.ts';
-import { buildSystemPrompt, type CoveredTopic } from '../lib/ai.ts';
+import { Hono } from "hono";
+import { streamText, convertToModelMessages, type UIMessage } from "ai";
+import { createAnthropic } from "@ai-sdk/anthropic";
+import { eq, and } from "drizzle-orm";
+import { db } from "../../db/index.ts";
+import { conversations, messages as messagesTable } from "../../db/schema.ts";
+import { getAuth } from "../lib/require-auth.ts";
+import { buildSystemPrompt } from "../lib/prompt.ts";
+import { inlineLocalImages } from "../lib/uploads.ts";
+import { learnFromExchange } from "../lib/learn.ts";
+import { CHAT_MODEL } from "../lib/config.ts";
 
 const app = new Hono();
 
-app.post('/', async (c) => {
-  const body = await c.req.json<{
-    messages: unknown[];
-    topicId: number;
-    userId: number;
-  }>();
+/** Pull the plain text out of a UIMessage's parts. */
+function textOf(message: UIMessage): string {
+  return message.parts
+    .filter((p) => p.type === "text")
+    .map((p) => (p as { text: string }).text)
+    .join("")
+    .trim();
+}
 
-  const { topicId, userId } = body;
+/** Pull attached image URLs out of a UIMessage's parts. */
+function imagesOf(message: UIMessage): string[] {
+  return message.parts
+    .filter((p) => p.type === "file" && (p as { mediaType?: string }).mediaType?.startsWith("image/"))
+    .map((p) => (p as { url: string }).url);
+}
 
-  // DefaultChatTransport sends UIMessage[] (with parts), convert to ModelMessage[]
-  const modelMessages = await convertToModelMessages(body.messages);
+/** First line of the first question, used as the sidebar label. */
+function titleFrom(text: string): string {
+  const oneLine = text.replace(/\s+/g, " ").trim();
+  if (oneLine.length <= 50) return oneLine || "New chat";
+  return `${oneLine.slice(0, 50).replace(/\s+\S*$/, "")}…`;
+}
 
-  // Load topic from DB
-  const [topic] = await db
+app.post("/", async (c) => {
+  const auth = await getAuth(c);
+  if (!auth) return c.json({ error: "Not signed in." }, 401);
+
+  const body = await c.req.json<{ messages: UIMessage[]; conversationId: number }>();
+  const conversationId = Number(body.conversationId);
+
+  const [conversation] = await db
     .select()
-    .from(topics)
-    .where(eq(topics.id, topicId))
-    .limit(1);
+    .from(conversations)
+    .where(and(eq(conversations.id, conversationId), eq(conversations.userId, auth.userId)));
 
-  if (!topic) {
-    return c.json({ error: `Topic with id ${topicId} not found` }, 404);
-  }
+  if (!conversation) return c.json({ error: "Conversation not found." }, 404);
 
-  // Load knowledge file content
-  let knowledgeContent: string;
-  try {
-    knowledgeContent = loadKnowledgeFile(topic.filePath);
-  } catch (err) {
-    return c.json(
-      { error: (err as Error).message },
-      500
-    );
-  }
+  const lastUserMessage = [...body.messages].reverse().find((m) => m.role === "user");
+  const userText = lastUserMessage ? textOf(lastUserMessage) : "";
+  const userImages = lastUserMessage ? imagesOf(lastUserMessage) : [];
 
-  // Fetch this user's name + past assessments to personalise + inform coverage
-  let studentName: string | undefined;
-  if (userId) {
-    const [u] = await db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-    studentName = u?.name ?? undefined;
-  }
+  // Save the student's message right away, so nothing is lost if the
+  // stream drops halfway through.
+  if (lastUserMessage) {
+    await db.insert(messagesTable).values({
+      conversationId,
+      role: "user",
+      text: userText,
+      images: JSON.stringify(userImages),
+    });
 
-  const coverage: CoveredTopic[] = [];
-  if (userId) {
-    const pastAssessments = await db
-      .select({
-        topicId: assessments.topicId,
-        topicName: topics.name,
-        score: assessments.score,
-        createdAt: assessments.createdAt,
-      })
-      .from(assessments)
-      .leftJoin(topics, eq(assessments.topicId, topics.id))
-      .leftJoin(users, eq(assessments.userId, users.id))
-      .where(eq(assessments.userId, userId));
-
-    for (const a of pastAssessments) {
-      if (a.topicName && a.score != null && a.createdAt) {
-        coverage.push({
-          topicName: a.topicName,
-          score: a.score,
-          completedAt: a.createdAt.slice(0, 10),
-          isCurrentTopic: a.topicId === topicId,
-        });
-      }
+    if (conversation.title === "New chat" && userText) {
+      await db
+        .update(conversations)
+        .set({ title: titleFrom(userText) })
+        .where(eq(conversations.id, conversationId));
     }
   }
 
-  // Build system prompt
-  const systemPrompt = buildSystemPrompt(topic.name, knowledgeContent, coverage, studentName);
+  const systemPrompt = await buildSystemPrompt();
+  const modelMessages = inlineLocalImages(await convertToModelMessages(body.messages));
 
-  // Create an Anthropic client that reads ANTHROPIC_API_KEY from process.env
-  const anthropic = createAnthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
-  });
+  const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-  // Stream the response
   const result = streamText({
-    model: anthropic('claude-haiku-4-5-20251001'),
-    system: systemPrompt,
-    messages: modelMessages,
-    maxSteps: 3,
-    tools: {
-      showQuiz: tool({
-        description:
-          'Display a multiple-choice quiz question to the student to check factual recall.',
-        inputSchema: jsonSchema<{ question: string; options: string[]; correctIndex: number }>({
-          type: 'object',
-          properties: {
-            question: { type: 'string', description: 'The quiz question to ask' },
-            options: { type: 'array', items: { type: 'string' }, description: 'List of answer choices' },
-            correctIndex: { type: 'number', description: 'Zero-based index of the correct answer in the options array' },
-          },
-          required: ['question', 'options', 'correctIndex'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
-      showChecklist: tool({
-        description:
-          'Display a checklist to the student to assess procedural knowledge.',
-        inputSchema: jsonSchema<{ title: string; items: string[] }>({
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Title of the checklist' },
-            items: { type: 'array', items: { type: 'string' }, description: 'List of checklist items (maximum 5)', maxItems: 5 },
-          },
-          required: ['title', 'items'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
-      showDragOrder: tool({
-        description:
-          'Display a drag-and-drop ordering exercise where the student arranges items in the correct sequence.',
-        inputSchema: jsonSchema<{ instruction: string; items: string[] }>({
-          type: 'object',
-          properties: {
-            instruction: { type: 'string', description: 'What the student should order (e.g. "Put these mill setup steps in the correct order")' },
-            items: { type: 'array', items: { type: 'string' }, description: 'The items in their CORRECT order. The widget will shuffle them for display.' },
-          },
-          required: ['instruction', 'items'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
-      showScenario: tool({
-        description:
-          'Display a multi-step diagnostic scenario where the student makes choices to walk through a troubleshooting or decision process.',
-        inputSchema: jsonSchema<{
-          title: string;
-          scenario: string;
-          steps: Array<{
-            id: string;
-            prompt: string;
-            choices: Array<{
-              text: string;
-              nextStepId: string | null;
-              feedback: string;
-              isOptimal: boolean;
-            }>;
-          }>;
-        }>({
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Short title for the scenario' },
-            scenario: { type: 'string', description: 'Initial situation description presented to the student' },
-            steps: {
-              type: 'array',
-              description: 'Decision tree steps. Every choice nextStepId must reference a valid step id, or null to end.',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  prompt: { type: 'string' },
-                  choices: {
-                    type: 'array',
-                    items: {
-                      type: 'object',
-                      properties: {
-                        text: { type: 'string' },
-                        nextStepId: { type: ['string', 'null'] },
-                        feedback: { type: 'string' },
-                        isOptimal: { type: 'boolean' },
-                      },
-                      required: ['text', 'nextStepId', 'feedback', 'isOptimal'],
-                    },
-                  },
-                },
-                required: ['id', 'prompt', 'choices'],
-              },
-            },
-          },
-          required: ['title', 'scenario', 'steps'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
-      showCodeRunner: tool({
-        description:
-          'Display a code/procedure editor where the student writes or completes a snippet. Used for G-code, pseudo-code, or structured procedures.',
-        inputSchema: jsonSchema<{
-          prompt: string;
-          language: string;
-          starterCode: string;
-          expectedPatterns: string[];
-          solutionCode: string;
-        }>({
-          type: 'object',
-          properties: {
-            prompt: { type: 'string', description: 'What the student should write or complete' },
-            language: { type: 'string', description: 'Language hint: gcode, pseudocode, or procedure' },
-            starterCode: { type: 'string', description: 'Pre-filled template. Use ___ for fill-in blanks, or empty string for free-write.' },
-            expectedPatterns: {
-              type: 'array',
-              items: { type: 'string' },
-              description: 'Key terms the student answer should contain. Used for client-side scoring.',
-            },
-            solutionCode: { type: 'string', description: 'The complete correct answer, revealed on request after submission.' },
-          },
-          required: ['prompt', 'language', 'starterCode', 'expectedPatterns', 'solutionCode'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
-      showLabeledDiagram: tool({
-        description:
-          'Display an interactive labeled diagram where the student matches part names to numbered hotspot positions.',
-        inputSchema: jsonSchema<{
-          title: string;
-          description: string;
-          parts: Array<{ id: string; label: string; hint: string; x: number; y: number }>;
-        }>({
-          type: 'object',
-          properties: {
-            title: { type: 'string', description: 'Diagram title (e.g. "Vertical Milling Machine — Front View")' },
-            description: { type: 'string', description: 'Brief text description to orient the student' },
-            parts: {
-              type: 'array',
-              description: 'Hotspot parts. Place in logical spatial positions: spindle top, table middle, base bottom. x/y are percentages where 0,0 = top-left, 100,100 = bottom-right.',
-              items: {
-                type: 'object',
-                properties: {
-                  id: { type: 'string' },
-                  label: { type: 'string', description: 'Correct part name' },
-                  hint: { type: 'string', description: 'Short hint shown after a wrong guess' },
-                  x: { type: 'number', description: 'Horizontal position as percentage (0–100)' },
-                  y: { type: 'number', description: 'Vertical position as percentage (0–100)' },
-                },
-                required: ['id', 'label', 'hint', 'x', 'y'],
-              },
-            },
-          },
-          required: ['title', 'description', 'parts'],
-        }),
-        execute: async () => ({ displayed: true }),
-      }),
+    model: anthropic(CHAT_MODEL),
+    messages: [
+      {
+        role: "system",
+        content: systemPrompt,
+        // The prompt barely changes between messages, so caching it is a
+        // straight cost saving on every single turn.
+        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
+      },
+      ...modelMessages,
+    ],
+    onFinish: async ({ text }) => {
+      try {
+        await db.insert(messagesTable).values({
+          conversationId,
+          role: "assistant",
+          text,
+        });
+        await db
+          .update(conversations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(conversations.id, conversationId));
+      } catch (err) {
+        console.error("Failed to save assistant message:", err);
+      }
+
+      // Deliberately not awaited — the student already has their answer and
+      // shouldn't wait on background bookkeeping.
+      void learnFromExchange(userText, text, userImages.length > 0);
     },
   });
 
-  // Return the AI SDK UI message stream so the DefaultChatTransport on the
-  // client can parse the JSON event protocol correctly (v6 requirement).
   return result.toUIMessageStreamResponse();
 });
 
