@@ -6,6 +6,7 @@ import Prompt from "./pages/Prompt";
 import AuthCallback from "./pages/AuthCallback";
 import { AuthProvider } from "./context/AuthContext";
 import { useAuth } from "./context/auth-context";
+import { buttonClass } from "./lib/button-styles";
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
@@ -42,16 +43,10 @@ function RouteErrorBoundary() {
         <h1 className="text-lg font-bold text-[var(--text-h)]">{title}</h1>
         <p className="text-sm text-[var(--text)] mt-2 break-words">{message}</p>
         <div className="flex gap-2 justify-center mt-5">
-          <button
-            onClick={() => navigate("/")}
-            className="px-4 py-2 rounded-lg bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-85 transition-opacity"
-          >
+          <button onClick={() => navigate("/")} className={buttonClass("primary", "sm")}>
             Back to chat
           </button>
-          <button
-            onClick={() => window.location.reload()}
-            className="px-4 py-2 rounded-lg border border-[var(--border)] text-[var(--text)] text-sm font-semibold hover:text-[var(--text-h)] transition-colors"
-          >
+          <button onClick={() => window.location.reload()} className={buttonClass("outline", "sm")}>
             Reload
           </button>
         </div>

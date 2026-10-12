@@ -2,12 +2,23 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { promptVersions, settings, teamFacts, users } from "../../db/schema.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "./default-prompt.ts";
+import { buildDocIndex, ensureDocsSeeded } from "./docs.ts";
+import {
+  assembleDoc,
+  parseDoc,
+  serializeDoc,
+  SECTIONS_FORMAT,
+  type PromptFormat,
+  type PromptSection,
+} from "./prompt-sections.ts";
 
 export const PROMPT_KEY = "system_prompt";
 
 export interface PromptVersion {
   version: number;
+  /** Raw stored payload — the prompt itself, or a sections JSON document. */
   text: string;
+  format: PromptFormat;
   authorId: number | null;
   authorName: string;
   note: string | null;
@@ -15,7 +26,7 @@ export interface PromptVersion {
 }
 
 /** History-list entry — same as a version, minus the (potentially large) text. */
-export type PromptVersionMeta = Omit<PromptVersion, "text"> & { size: number };
+export type PromptVersionMeta = Omit<PromptVersion, "text" | "format"> & { size: number };
 
 export type SaveResult =
   | { ok: true; version: PromptVersion }
@@ -69,9 +80,23 @@ export async function currentVersion(): Promise<PromptVersion> {
   return toVersion(row);
 }
 
+/**
+ * A version's assembled prompt text, whatever its storage format. Identity
+ * for plain-text versions — pre-sections rows keep producing the exact bytes
+ * they always did, so the prompt cache survives the format transition.
+ */
+export function assembledTextOf(v: PromptVersion): string {
+  return v.format === "text" ? v.text : assembleDoc(parseDoc(v.text, v.format));
+}
+
+/** A version's editable sections — legacy text becomes one big section. */
+export function sectionsOf(v: PromptVersion): PromptSection[] {
+  return parseDoc(v.text, v.format).sections;
+}
+
 /** The teacher-editable instructions, as plain text. */
 export async function getBasePrompt(): Promise<string> {
-  return (await currentVersion()).text;
+  return assembledTextOf(await currentVersion());
 }
 
 /**
@@ -83,6 +108,7 @@ export async function getBasePrompt(): Promise<string> {
  */
 export async function savePromptVersion(input: {
   text: string;
+  format?: PromptFormat;
   baseVersion: number;
   authorId: number;
   note?: string | null;
@@ -93,27 +119,51 @@ export async function savePromptVersion(input: {
   const next = current.version + 1;
   const authorName = await nameOf(input.authorId);
 
-  // The WHERE clause re-checks the version inside the INSERT itself, so this
-  // is safe without a transaction — which matters because D1 has none. Two
-  // simultaneous saves both compute the same `next`; the UNIQUE index on
-  // `version` lets exactly one of them land.
-  let inserted: unknown[];
-  try {
-    inserted = await db.all(sql`
-      INSERT INTO prompt_versions (version, text, author_id, author_name, note)
-      SELECT ${next}, ${input.text}, ${input.authorId}, ${authorName}, ${input.note ?? null}
-      WHERE ${next} = (SELECT COALESCE(MAX(version), 0) + 1 FROM prompt_versions)
-      RETURNING version
-    `);
-  } catch (err) {
-    if (isUniqueViolation(err)) return { ok: false, conflict: await currentVersion() };
-    throw err;
-  }
-
-  // No row came back: the guard failed, so someone beat us to `next`.
-  if (inserted.length === 0) return { ok: false, conflict: await currentVersion() };
+  const landed = await insertVersion(
+    next,
+    input.text,
+    input.format ?? "text",
+    input.authorId,
+    authorName,
+    input.note ?? null,
+  );
+  if (!landed) return { ok: false, conflict: await currentVersion() };
 
   return { ok: true, version: await currentVersion() };
+}
+
+/** Save a teacher's edited sections as the next version. */
+export async function saveSections(input: {
+  sections: PromptSection[];
+  baseVersion: number;
+  authorId: number;
+  note?: string | null;
+}): Promise<SaveResult> {
+  return savePromptVersion({
+    text: serializeDoc({ sections: input.sections }),
+    format: SECTIONS_FORMAT,
+    baseVersion: input.baseVersion,
+    authorId: input.authorId,
+    note: input.note,
+  });
+}
+
+/**
+ * Append a version written by the app itself rather than a person — used by
+ * the one-time docs migration. Same append-only rules as a teacher save; a
+ * lost race just means recomputing `next` and trying again.
+ */
+export async function appendSystemVersion(
+  text: string,
+  note: string,
+  format: PromptFormat = "text",
+): Promise<PromptVersion> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = await currentVersion();
+    const landed = await insertVersion(current.version + 1, text, format, null, "System", note);
+    if (landed) return currentVersion();
+  }
+  throw new Error("Could not append a system prompt version — too much write contention.");
 }
 
 /**
@@ -132,55 +182,90 @@ export async function rollbackTo(
   const current = await currentVersion();
   return savePromptVersion({
     text: target.text,
+    format: target.format,
     baseVersion: current.version,
     authorId,
     note: `Reverted to v${version}`,
   });
 }
 
-/** Learned team facts, most-mentioned first — the order teachers see. */
-export async function getTeamFacts() {
-  return db
-    .select()
-    .from(teamFacts)
-    .orderBy(desc(teamFacts.mentionCount), desc(teamFacts.lastSeenAt));
-}
-
 /**
- * The full system prompt sent to Claude: the teacher's instructions plus
- * whatever the app has learned about this specific team's hardware.
+ * The full system prompt sent to Claude: the teacher's instructions, the
+ * index of reference docs the AI can open with read_doc, and whatever the
+ * app has learned about this specific team's hardware.
  *
  * The team-context block is what makes "what motor is on the intake?"
  * answerable — without it the AI has no idea which motor anyone means.
+ *
+ * Every block here keeps a stable order between requests. Anthropic's prompt
+ * cache is a prefix match: the doc index sorts by filename (it only changes
+ * when a teacher edits the library), and the facts block holds only APPROVED
+ * facts ordered by id — so its bytes change only when a teacher acts on the
+ * review queue, never behind anyone's back. Reinforcements bump counters
+ * that this block deliberately doesn't print.
  */
 export async function buildSystemPrompt(): Promise<string> {
+  ensureDocsSeeded();
   const base = await getBasePrompt();
+  const docIndex = buildDocIndex();
+  const facts = await db
+    .select()
+    .from(teamFacts)
+    .where(eq(teamFacts.status, "approved"))
+    .orderBy(asc(teamFacts.id));
 
-  // Ordered by id, not by mention count. Anthropic's prompt cache is a prefix
-  // match, and learnFromExchange() bumps mentionCount/lastSeenAt after nearly
-  // every exchange — ranking here would reshuffle this block constantly and
-  // throw away the cache on the next turn. Insertion order never changes.
-  const facts = await db.select().from(teamFacts).orderBy(asc(teamFacts.id));
+  const parts = [base];
+  if (docIndex) parts.push(docIndex);
 
-  if (facts.length === 0) return base;
-
-  const lines = facts.map((f) => `  - ${f.text}`).join("\n");
-
-  return `${base}
-
-━━━ TEAM CONTEXT (learned from this team's own chats) ━━━
+  if (facts.length > 0) {
+    const lines = facts.map((f) => `  - ${f.text}`).join("\n");
+    parts.push(`━━━ TEAM CONTEXT (learned from this team's own chats) ━━━
 Specifics about THIS team's robot, shop, and parts. When someone refers to
 something vaguely ("the motor", "our router"), assume they mean these unless
 they say otherwise.
-${lines}`;
+${lines}`);
+  }
+
+  return parts.join("\n\n");
 }
 
 // ─── internals ────────────────────────────────────────────────────────────
+
+/**
+ * The one guarded INSERT every append goes through. The WHERE clause
+ * re-checks the version inside the INSERT itself, so this is safe without a
+ * transaction — which matters because D1 has none. Two simultaneous saves
+ * both compute the same `next`; the UNIQUE index on `version` lets exactly
+ * one of them land. Returns false when this one lost.
+ */
+async function insertVersion(
+  next: number,
+  text: string,
+  format: PromptFormat,
+  authorId: number | null,
+  authorName: string,
+  note: string | null,
+): Promise<boolean> {
+  let inserted: unknown[];
+  try {
+    inserted = await db.all(sql`
+      INSERT INTO prompt_versions (version, text, format, author_id, author_name, note)
+      SELECT ${next}, ${text}, ${format}, ${authorId}, ${authorName}, ${note}
+      WHERE ${next} = (SELECT COALESCE(MAX(version), 0) + 1 FROM prompt_versions)
+      RETURNING version
+    `);
+  } catch (err) {
+    if (isUniqueViolation(err)) return false;
+    throw err;
+  }
+  return inserted.length > 0;
+}
 
 function toVersion(row: typeof promptVersions.$inferSelect): PromptVersion {
   return {
     version: row.version,
     text: row.text,
+    format: row.format,
     authorId: row.authorId,
     authorName: row.authorName,
     note: row.note,

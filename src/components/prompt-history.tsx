@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { buttonClass } from "../lib/button-styles";
 import { diffLines, diffStat } from "../lib/diff";
 import {
   fetchHistory,
@@ -29,6 +30,15 @@ export default function PromptHistory({ liveVersion, onClose, onRestored }: Prop
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Escape closes the drawer, like any other overlay.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   useEffect(() => {
     void (async () => {
@@ -87,10 +97,10 @@ export default function PromptHistory({ liveVersion, onClose, onRestored }: Prop
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 animate-fade-in" onClick={onClose}>
       <aside
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-3xl h-full flex flex-col bg-[var(--bg)] border-l border-[var(--border)] shadow-2xl"
+        className="w-full max-w-3xl h-full flex flex-col bg-[var(--bg)] border-l border-[var(--border)] shadow-2xl animate-slide-in-right"
       >
         <header className="flex items-center justify-between px-5 py-3.5 border-b border-[var(--border)] bg-[var(--card-bg)]">
           <div>
@@ -99,12 +109,10 @@ export default function PromptHistory({ liveVersion, onClose, onRestored }: Prop
               Nothing is ever overwritten — restoring adds a new version on top.
             </p>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close history"
-            className="px-2.5 py-1 rounded-lg text-sm text-[var(--text)] hover:text-[var(--text-h)] hover:bg-[var(--code-bg)] transition-colors"
-          >
-            ✕
+          <button onClick={onClose} aria-label="Close history" className={buttonClass("ghost", "icon-sm")}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
           </button>
         </header>
 
@@ -172,7 +180,7 @@ export default function PromptHistory({ liveVersion, onClose, onRestored }: Prop
                   <button
                     onClick={() => void restore(selected)}
                     disabled={busy}
-                    className="px-3 py-1 rounded-lg text-xs font-semibold bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 transition-opacity flex-shrink-0"
+                    className={buttonClass("primary", "xs", "flex-shrink-0")}
                   >
                     {busy ? "Restoring…" : `Restore v${selected}`}
                   </button>

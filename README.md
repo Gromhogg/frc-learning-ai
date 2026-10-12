@@ -218,19 +218,30 @@ src/                   React frontend
   context/             Auth provider and hook
   lib/                 API helper, client-side image resizing
 server/                Hono API
-  routes/              auth, chat, conversations, prompt, uploads
-  lib/                 config, prompt builder, learning loop, uploads, jwt
+  routes/              auth, chat, conversations, docs, prompt, uploads
+  lib/                 config, prompt builder, docs library, learning loop, uploads, jwt
 db/                    Drizzle schema, migration runner, seed script
 drizzle/               Generated migrations
-data/                  SQLite DB + uploaded photos (gitignored)
+data/                  SQLite DB + uploaded photos + reference docs (gitignored)
 ```
 
 ---
 
 ## Editing what the AI knows
 
-Sign in as a teacher and click **Prompt**. Everything the AI is told lives in
-that one text box, including the shop reference section (mill, lathe, CNC,
-waterjet, CAM, CAD, assembly, wiring, FRC basics). Edit it however you like —
-changes apply to the next message. Below it, **Team knowledge** lists what the
-app has learned on its own.
+Sign in as a teacher and click **Prompt**. The text box holds the AI's
+behavioral instructions — how it talks, safety rules, and a pointer to the
+reference docs. Edit it however you like; changes apply to the next message.
+
+**Reference docs** below it is the AI's library: the shop reference (mill,
+lathe, CNC, waterjet, CAM, CAD, assembly, wiring, FRC basics) lives here as
+`.txt`/`.md` files instead of being crammed into the prompt. The AI sees the
+list of filenames in every chat and opens a doc with its `read_doc` tool when
+a question needs the details — so docs only cost tokens when they're actually
+used. Drag files in to add to the library: game-manual notes, team procedures,
+anything. Uploading a file whose name is taken never overwrites — you choose
+Replace, Keep both, or Skip — and replaced or deleted docs are moved to
+`data/docs/.trash/` on the server (timestamped), never destroyed. You can also
+manage the files directly in `data/docs/` if you prefer.
+
+Below that, **Team knowledge** lists what the app has learned on its own.

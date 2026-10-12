@@ -1,40 +1,70 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { api, ApiError } from "../lib/api";
+import { ApiError } from "../lib/api";
 import {
+  assembleSections,
   fetchLive,
-  savePrompt as putPrompt,
+  saveSections as putSections,
   timeAgo,
   type LivePrompt,
-  type TeamFact,
+  type PromptSection,
 } from "../lib/prompt-api";
+import { buttonClass } from "../lib/button-styles";
+import Collapse from "../components/collapse";
 import PromptConflict from "../components/prompt-conflict";
 import PromptHistory from "../components/prompt-history";
+import PromptSectionCard from "../components/prompt-section-card";
+import DocsPanel from "../components/docs-panel";
+import FactsPanel from "../components/facts-panel";
+
+/** Starter sections teachers can add with one click. Bodies are suggestions —
+ * the AI reads them exactly as written, headings and all. */
+const SECTION_TEMPLATES: { label: string; title: string; body: string }[] = [
+  {
+    label: "Persona",
+    title: "Persona",
+    body: "PERSONA\nYou are a friendly, patient mentor for this FRC team. Talk like a knowledgeable shop teacher, not a textbook.",
+  },
+  {
+    label: "Teaching style",
+    title: "Teaching style",
+    body: "TEACHING STYLE\nGuide students toward the answer instead of handing it over. Ask what they've tried, explain the why, and keep answers short enough to read at a workbench.",
+  },
+  {
+    label: "Safety",
+    title: "Safety",
+    body: "SAFETY\nNever skip a safety warning to save space. When a question involves a machine or tool, state the relevant precautions before the procedure.",
+  },
+  { label: "Custom", title: "New section", body: "" },
+];
+
+/** Everything that makes two section lists "the same save". */
+function keyOf(sections: PromptSection[]): string {
+  return JSON.stringify(sections.map((s) => [s.id, s.title, s.body, s.enabled]));
+}
 
 export default function Prompt() {
   const navigate = useNavigate();
 
-  const [prompt, setPrompt] = useState("");
-  const [savedPrompt, setSavedPrompt] = useState("");
+  const [sections, setSections] = useState<PromptSection[]>([]);
+  const [savedSections, setSavedSections] = useState<PromptSection[]>([]);
   /** The version this editor was loaded from — sent on save to catch stale writes. */
   const [live, setLive] = useState<LivePrompt | null>(null);
   const [conflict, setConflict] = useState<LivePrompt | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [facts, setFacts] = useState<TeamFact[]>([]);
+  const [showPreview, setShowPreview] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingText, setEditingText] = useState("");
+  /** Sections added in this session, so their cards open ready to type in. */
+  const newIds = useRef(new Set<string>());
 
   useEffect(() => {
     void (async () => {
       try {
         const data = await fetchLive();
-        setPrompt(data.prompt);
-        setSavedPrompt(data.prompt);
-        setLive(data);
-        setFacts(data.facts);
+        adopt(data);
       } catch (err) {
         setStatus(err instanceof Error ? err.message : "Could not load the prompt.");
       } finally {
@@ -44,10 +74,10 @@ export default function Prompt() {
   }, []);
 
   /** Adopt whatever the server says is current, and clear any conflict. */
-  function adopt(next: LivePrompt, text = next.prompt) {
+  function adopt(next: LivePrompt) {
     setLive(next);
-    setPrompt(text);
-    setSavedPrompt(text);
+    setSections(next.sections);
+    setSavedSections(next.sections);
     setConflict(null);
   }
 
@@ -55,15 +85,17 @@ export default function Prompt() {
    * Save against `baseVersion`. A 409 means someone else got there first —
    * we surface both texts rather than clobbering theirs.
    */
-  async function savePrompt(baseVersion?: number) {
+  async function save(baseVersion?: number) {
     const base = baseVersion ?? live?.version;
     if (base === undefined) return;
 
     setSaving(true);
     setStatus(null);
     try {
-      const result = await putPrompt(prompt, base);
-      adopt(result, prompt);
+      const result = await putSections(sections, base);
+      setLive(result);
+      setSavedSections(sections);
+      setConflict(null);
       setStatus(`Saved as v${result.version}. New messages will use these instructions.`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
@@ -80,59 +112,60 @@ export default function Prompt() {
     }
   }
 
-  async function saveFact(id: number) {
-    const text = editingText.trim();
-    if (!text) return;
-    try {
-      await api(`/api/prompt/facts/${id}`, { method: "PATCH", body: JSON.stringify({ text }) });
-      setFacts((prev) => prev.map((f) => (f.id === id ? { ...f, text } : f)));
-      setEditingId(null);
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not update that fact.");
-    }
+  function updateSection(id: string, patch: Partial<PromptSection>) {
+    setSections((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
   }
 
-  async function deleteFact(id: number) {
-    try {
-      await api(`/api/prompt/facts/${id}`, { method: "DELETE" });
-      setFacts((prev) => prev.filter((f) => f.id !== id));
-    } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Could not delete that fact.");
-    }
+  function moveSection(index: number, direction: -1 | 1) {
+    setSections((prev) => {
+      const target = index + direction;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   }
 
-  const unsaved = prompt !== savedPrompt;
+  function addSection(template: (typeof SECTION_TEMPLATES)[number]) {
+    setSections((prev) => {
+      const base =
+        template.title
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-+|-+$/g, "") || "section";
+      let id = base;
+      for (let n = 2; prev.some((s) => s.id === id); n++) id = `${base}-${n}`;
+      newIds.current.add(id);
+      return [...prev, { id, title: template.title, body: template.body, enabled: true }];
+    });
+    setAddOpen(false);
+  }
+
+  const savedById = new Map(savedSections.map((s) => [s.id, s]));
+  const unsaved = keyOf(sections) !== keyOf(savedSections);
 
   return (
     <div className="min-h-screen bg-[var(--bg)]">
       <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--card-bg)] sticky top-0 z-10">
-        <button
-          onClick={() => navigate("/")}
-          className="flex items-center gap-1.5 px-3 py-1.5 -ml-2 rounded-lg text-sm font-medium text-[var(--text)] hover:bg-[var(--code-bg)] hover:text-[var(--text-h)] transition-colors"
-        >
+        <button onClick={() => navigate("/")} className={buttonClass("ghost", "sm", "-ml-2")}>
           ← Back to chat
         </button>
 
         <div className="flex items-center gap-2">
           {live && (
-            <button
-              onClick={() => setHistoryOpen(true)}
-              className="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text)] hover:bg-[var(--code-bg)] hover:text-[var(--text-h)] transition-colors"
-            >
+            <button onClick={() => setHistoryOpen(true)} className={buttonClass("ghost", "sm")}>
               v{live.version} · History
             </button>
           )}
           <button
-            onClick={() => void savePrompt()}
+            onClick={() => void save()}
             disabled={saving || !unsaved}
-            className={[
-              "px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
-              saving || !unsaved
-                ? "bg-[var(--border)] text-[var(--text)] cursor-not-allowed"
-                : "bg-[var(--accent)] text-white hover:opacity-90",
-            ].join(" ")}
+            className={buttonClass("primary", "sm", "min-w-[7.5rem]")}
           >
-            {saving ? "Saving…" : unsaved ? "Save changes" : "Saved"}
+            {/* Keyed so the label crossfades instead of snapping between states. */}
+            <span key={saving ? "saving" : unsaved ? "save" : "saved"} className="animate-fade-in">
+              {saving ? "Saving…" : unsaved ? "Save changes" : "Saved"}
+            </span>
           </button>
         </div>
       </header>
@@ -143,7 +176,10 @@ export default function Prompt() {
         ) : (
           <>
             {status && (
-              <p className="mb-4 text-sm text-[var(--accent)] bg-[var(--accent-bg)] border border-[var(--accent-border)] rounded-lg px-4 py-2.5">
+              <p
+                key={status}
+                className="mb-4 text-sm text-[var(--accent)] bg-[var(--accent-bg)] border border-[var(--accent-border)] rounded-lg px-4 py-2.5 animate-rise-in"
+              >
                 {status}
               </p>
             )}
@@ -151,9 +187,9 @@ export default function Prompt() {
             {conflict && (
               <PromptConflict
                 theirs={conflict}
-                mine={prompt}
+                mine={assembleSections(sections)}
                 busy={saving}
-                onKeepMine={() => void savePrompt(conflict.version)}
+                onKeepMine={() => void save(conflict.version)}
                 onTakeTheirs={() => adopt(conflict)}
                 onDismiss={() => setConflict(null)}
               />
@@ -162,8 +198,9 @@ export default function Prompt() {
             <section>
               <h1 className="text-xl font-bold text-[var(--text-h)]">AI instructions</h1>
               <p className="text-sm text-[var(--text)] mt-1.5 leading-relaxed">
-                This is what the AI is told before every conversation. Edit it to change how it
-                answers, what it knows about your shop, or how careful it is about safety.
+                This is what the AI is told before every conversation, split into sections you can
+                edit, reorder, or switch off one at a time. Section titles are labels for this
+                page — the AI reads the text inside, top to bottom.
               </p>
               {live && (
                 <p className="text-xs text-[var(--text)] mt-1.5">
@@ -172,87 +209,78 @@ export default function Prompt() {
                 </p>
               )}
 
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                spellCheck={false}
-                className="w-full mt-4 h-[28rem] resize-y rounded-xl border-2 border-[var(--border)] bg-[var(--code-bg)] px-4 py-3 text-sm leading-relaxed text-[var(--text-h)] font-mono focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-colors"
-              />
-            </section>
+              <ul className="mt-4 space-y-2">
+                {sections.map((section, index) => (
+                  <PromptSectionCard
+                    key={section.id}
+                    section={section}
+                    index={index}
+                    count={sections.length}
+                    dirty={keyOf([section]) !== keyOf([savedById.get(section.id) ?? section])}
+                    defaultOpen={newIds.current.has(section.id)}
+                    onChange={(patch) => updateSection(section.id, patch)}
+                    onMove={(direction) => moveSection(index, direction)}
+                    onDelete={() => setSections((prev) => prev.filter((s) => s.id !== section.id))}
+                  />
+                ))}
+              </ul>
 
-            <section className="mt-10">
-              <h2 className="text-lg font-bold text-[var(--text-h)]">Team knowledge</h2>
-              <p className="text-sm text-[var(--text)] mt-1.5 leading-relaxed">
-                Things the AI has picked up from real conversations — the parts, tools, and names
-                your team actually uses. These are added to the instructions automatically so the
-                AI knows what someone means by "the motor". Delete anything that's wrong.
-              </p>
-
-              {facts.length === 0 ? (
-                <p className="mt-5 text-sm text-[var(--text)] bg-[var(--card-bg)] border border-[var(--border)] rounded-xl px-4 py-5 text-center">
-                  Nothing learned yet. As students chat about the robot, facts will show up here.
-                </p>
-              ) : (
-                <ul className="mt-5 space-y-2">
-                  {facts.map((fact) => (
-                    <li
-                      key={fact.id}
-                      className="flex items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] px-4 py-3"
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                {addOpen ? (
+                  <>
+                    {SECTION_TEMPLATES.map((template, i) => (
+                      <button
+                        key={template.label}
+                        onClick={() => addSection(template)}
+                        style={{ animationDelay: `${i * 35}ms` }}
+                        className={buttonClass("outline", "sm", "animate-pop-in")}
+                      >
+                        {template.label}
+                      </button>
+                    ))}
+                    <button
+                      onClick={() => setAddOpen(false)}
+                      aria-label="Cancel adding a section"
+                      style={{ animationDelay: `${SECTION_TEMPLATES.length * 35}ms` }}
+                      className={buttonClass("ghost", "icon-sm", "animate-pop-in")}
                     >
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--accent)] flex-shrink-0" />
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="14" height="14">
+                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => setAddOpen(true)}
+                    className={buttonClass(
+                      "bare",
+                      "sm",
+                      "font-medium border border-dashed border-[var(--border)] text-[var(--text)] hover:text-[var(--text-h)] hover:border-[var(--accent-border)] hover:bg-[var(--accent-bg)]",
+                    )}
+                  >
+                    + Add section
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowPreview((v) => !v)}
+                  aria-expanded={showPreview}
+                  aria-controls="prompt-preview"
+                  className={buttonClass("ghost", "sm", "ml-auto")}
+                >
+                  {showPreview ? "Hide preview" : "Preview what the AI sees"}
+                </button>
+              </div>
 
-                      <div className="flex-1 min-w-0">
-                        {editingId === fact.id ? (
-                          <input
-                            value={editingText}
-                            onChange={(e) => setEditingText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter") void saveFact(fact.id);
-                              if (e.key === "Escape") setEditingId(null);
-                            }}
-                            autoFocus
-                            className="w-full rounded-lg border-2 border-[var(--accent-border)] bg-[var(--code-bg)] px-3 py-1.5 text-sm text-[var(--text-h)] focus:outline-none"
-                          />
-                        ) : (
-                          <p className="text-sm text-[var(--text-h)] break-words">{fact.text}</p>
-                        )}
-                        <p className="text-xs text-[var(--text)] mt-1">
-                          mentioned in {fact.mentionCount} {fact.mentionCount === 1 ? "chat" : "chats"}
-                        </p>
-                      </div>
-
-                      <div className="flex gap-1 flex-shrink-0">
-                        {editingId === fact.id ? (
-                          <button
-                            onClick={() => void saveFact(fact.id)}
-                            className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-[var(--accent)] text-white hover:opacity-90 transition-opacity"
-                          >
-                            Save
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              setEditingId(fact.id);
-                              setEditingText(fact.text);
-                            }}
-                            className="px-2.5 py-1 rounded-lg text-xs font-medium text-[var(--text)] hover:text-[var(--accent)] hover:bg-[var(--accent-bg)] transition-colors"
-                          >
-                            Edit
-                          </button>
-                        )}
-                        <button
-                          onClick={() => void deleteFact(fact.id)}
-                          aria-label="Delete fact"
-                          className="px-2.5 py-1 rounded-lg text-xs font-medium text-[var(--text)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <Collapse open={showPreview} id="prompt-preview">
+                <pre className="mt-3 rounded-xl border border-[var(--border)] bg-[var(--code-bg)] px-4 py-3 max-h-96 overflow-auto text-xs leading-relaxed text-[var(--text-h)] font-mono whitespace-pre-wrap break-words">
+                  {assembleSections(sections) || "(no enabled sections — the AI would get empty instructions)"}
+                </pre>
+              </Collapse>
             </section>
+
+            <DocsPanel />
+
+            <FactsPanel />
           </>
         )}
       </main>

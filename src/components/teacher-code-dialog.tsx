@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../lib/api";
+import { buttonClass } from "../lib/button-styles";
 import type { AuthUser } from "../context/auth-context";
 
 interface Props {
@@ -34,13 +35,13 @@ export default function TeacherCodeDialog({ onClose, onSuccess }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 animate-fade-in"
       onClick={onClose}
     >
       <form
         onSubmit={submit}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-6 shadow-2xl"
+        className="w-full max-w-sm rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-6 shadow-2xl animate-pop-in"
       >
         <h2 className="text-base font-bold text-[var(--text-h)]">Enter teacher code</h2>
         <p className="text-sm text-[var(--text)] mt-1.5 leading-relaxed">
@@ -62,15 +63,11 @@ export default function TeacherCodeDialog({ onClose, onSuccess }: Props) {
           <button
             type="submit"
             disabled={!code.trim() || busy}
-            className="flex-1 px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+            className={buttonClass("primary", "md", "flex-1")}
           >
             {busy ? "Checking…" : "Confirm"}
           </button>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 rounded-xl border border-[var(--border)] text-[var(--text-h)] text-sm font-semibold hover:bg-[var(--bg)] transition-colors"
-          >
+          <button type="button" onClick={onClose} className={buttonClass("outline", "md")}>
             Cancel
           </button>
         </div>

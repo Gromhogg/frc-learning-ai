@@ -10,7 +10,7 @@ interface Props {
 
 function TypingIndicator() {
   return (
-    <div className="flex items-end gap-3 mb-4">
+    <div className="flex items-end gap-3 mb-4 animate-rise-in">
       <div className="w-8 h-8 rounded-full bg-[var(--accent-bg)] border border-[var(--accent-border)] flex-shrink-0 flex items-center justify-center text-xs font-bold text-[var(--accent)]">
         AI
       </div>
@@ -29,7 +29,7 @@ function MessageBubble({ message, userInitial }: { message: UIMessage; userIniti
   const isUser = message.role === "user";
 
   return (
-    <div className={`flex items-end gap-3 mb-4 ${isUser ? "flex-row-reverse" : "flex-row"}`}>
+    <div className={`flex items-end gap-3 mb-4 animate-rise-in ${isUser ? "flex-row-reverse" : "flex-row"}`}>
       <div
         className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${
           isUser
@@ -55,6 +55,21 @@ function MessageBubble({ message, userInitial }: { message: UIMessage; userIniti
               >
                 {part.text}
               </div>
+            );
+          }
+
+          // The AI opening a reference doc mid-answer. Not persisted — on a
+          // reloaded conversation only the answer text remains, which is fine.
+          if (part.type === "tool-read_doc") {
+            const tool = part as { state?: string; input?: { name?: string } };
+            return (
+              <span
+                key={i}
+                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs text-[var(--text)] bg-[var(--code-bg)] border border-[var(--border)]"
+              >
+                {tool.state === "output-available" ? "Checked" : "Checking"}{" "}
+                {tool.input?.name ?? "a reference doc"}
+              </span>
             );
           }
 
@@ -86,7 +101,8 @@ export default function ChatThread({ messages, isLoading, userInitial }: Props) 
   // Follow the conversation as it grows, but don't fight the user if they've
   // scrolled up to re-read something.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    bottomRef.current?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth" });
   }, [messages.length, isLoading]);
 
   return (

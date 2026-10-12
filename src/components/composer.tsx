@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { resizeImage } from "../lib/resize-image";
 import { api, API_BASE } from "../lib/api";
+import { buttonClass } from "../lib/button-styles";
 
 export interface Attachment {
   url: string;
@@ -77,26 +78,33 @@ export default function Composer({ disabled, onSend }: Props) {
     <div className="border-t border-[var(--border)] px-4 py-4 bg-[var(--bg)]">
       <div className="max-w-3xl mx-auto">
         {error && (
-          <p className="text-xs text-red-400 mb-2 px-1">{error}</p>
+          <p className="text-xs text-red-400 mb-2 px-1 animate-fade-in">{error}</p>
         )}
 
         {attachments.length > 0 && (
           <div className="flex gap-2 mb-2 flex-wrap">
             {attachments.map((attachment) => (
-              <div key={attachment.url} className="relative">
+              <div key={attachment.url} className="relative animate-pop-in">
                 <img
                   src={attachment.previewUrl}
                   alt="Attached"
                   className="w-16 h-16 object-cover rounded-lg border border-[var(--border)]"
                 />
                 <button
+                  type="button"
                   onClick={() =>
                     setAttachments((prev) => prev.filter((a) => a.url !== attachment.url))
                   }
                   aria-label="Remove photo"
-                  className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-[var(--card-bg)] border border-[var(--border)] text-[var(--text-h)] flex items-center justify-center hover:border-red-400 hover:text-red-400 transition-colors"
+                  className={[
+                    "absolute -top-2 -right-2 w-6 h-6 rounded-full flex items-center justify-center shadow-md",
+                    "bg-[var(--card-bg)] border border-[var(--border)] text-[var(--text-h)]",
+                    "hover:border-red-400 hover:text-red-400 hover:scale-110 active:scale-95",
+                    "transition-[color,border-color,scale] duration-150",
+                    "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
+                  ].join(" ")}
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" width="10" height="10">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" width="12" height="12">
                     <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
                 </button>
@@ -127,7 +135,11 @@ export default function Composer({ disabled, onSend }: Props) {
             onClick={() => fileInputRef.current?.click()}
             disabled={uploading || attachments.length >= MAX_PHOTOS}
             aria-label="Attach a photo"
-            className="px-3 py-2.5 rounded-xl border-2 border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)] hover:text-[var(--accent)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+            className={buttonClass(
+              "bare",
+              "icon-md",
+              "border-2 border-[var(--border)] text-[var(--text)] hover:border-[var(--accent-border)] hover:text-[var(--accent)]",
+            )}
           >
             {uploading ? (
               <span className="block w-[18px] h-[18px] rounded-full border-2 border-[var(--text)] border-t-transparent animate-spin" />
@@ -148,17 +160,7 @@ export default function Composer({ disabled, onSend }: Props) {
             style={{ maxHeight: "8rem", overflowY: "auto" }}
           />
 
-          <button
-            type="submit"
-            disabled={!canSend}
-            className={[
-              "px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-150",
-              "focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]",
-              canSend
-                ? "bg-[var(--accent)] text-white hover:opacity-90 active:scale-95"
-                : "bg-[var(--border)] text-[var(--text)] cursor-not-allowed",
-            ].join(" ")}
-          >
+          <button type="submit" disabled={!canSend} className={buttonClass("primary", "md")}>
             Send
           </button>
         </form>

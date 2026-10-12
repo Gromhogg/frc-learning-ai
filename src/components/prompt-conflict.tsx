@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { buttonClass } from "../lib/button-styles";
 import { diffLines, diffStat } from "../lib/diff";
 import { timeAgo, type LivePrompt } from "../lib/prompt-api";
 
@@ -31,7 +32,7 @@ export default function PromptConflict({
   const identical = theirs.prompt === mine;
 
   return (
-    <section className="mb-6 rounded-xl border-2 border-amber-500/40 bg-amber-500/5 overflow-hidden">
+    <section className="mb-6 rounded-xl border-2 border-amber-500/40 bg-amber-500/5 overflow-hidden animate-rise-in">
       <header className="flex items-start justify-between gap-3 px-4 py-3 border-b border-amber-500/20">
         <div>
           <h2 className="text-sm font-bold text-[var(--text-h)]">
@@ -55,9 +56,11 @@ export default function PromptConflict({
         <button
           onClick={onDismiss}
           aria-label="Dismiss"
-          className="px-2 py-0.5 -mr-1 rounded-lg text-sm text-[var(--text)] hover:text-[var(--text-h)] hover:bg-[var(--code-bg)] transition-colors flex-shrink-0"
+          className={buttonClass("ghost", "icon-xs", "-mr-1 flex-shrink-0")}
         >
-          ✕
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" width="14" height="14">
+            <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
         </button>
       </header>
 
@@ -67,18 +70,10 @@ export default function PromptConflict({
       </div>
 
       <div className="flex flex-wrap gap-2 px-4 py-3 border-t border-amber-500/20">
-        <button
-          onClick={onKeepMine}
-          disabled={busy}
-          className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-[var(--accent)] text-white hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
-        >
+        <button onClick={onKeepMine} disabled={busy} className={buttonClass("primary", "sm")}>
           {busy ? "Saving…" : `Keep mine (saves as v${theirs.version + 1})`}
         </button>
-        <button
-          onClick={onTakeTheirs}
-          disabled={busy}
-          className="px-4 py-1.5 rounded-lg text-sm font-medium border border-[var(--border)] text-[var(--text-h)] hover:bg-[var(--code-bg)] disabled:opacity-40 transition-colors"
-        >
+        <button onClick={onTakeTheirs} disabled={busy} className={buttonClass("outline", "sm")}>
           Discard mine, use theirs
         </button>
       </div>

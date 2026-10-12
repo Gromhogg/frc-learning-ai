@@ -1,17 +1,17 @@
 import { Hono } from "hono";
-import { eq } from "drizzle-orm";
-import { db } from "../../db/index.ts";
-import { teamFacts } from "../../db/schema.ts";
 import { getTeacher } from "../lib/require-auth.ts";
 import {
+  assembledTextOf,
   currentVersion,
-  getTeamFacts,
   getVersion,
   listVersions,
   rollbackTo,
   savePromptVersion,
+  saveSections,
+  sectionsOf,
   type PromptVersion,
 } from "../lib/prompt.ts";
+import { validateSections } from "../lib/prompt-sections.ts";
 
 const app = new Hono<{ Variables: { teacherId: number } }>();
 
@@ -24,10 +24,17 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-/** What the editor needs to show the prompt and to save it back safely. */
+/**
+ * What the editor needs to show the prompt and to save it back safely.
+ * `prompt` is always the assembled text — history, diffs, and the conflict
+ * panel read it no matter how the version is stored; `sections` is the
+ * structured form the editor actually edits.
+ */
 function live(v: PromptVersion) {
   return {
-    prompt: v.text,
+    prompt: assembledTextOf(v),
+    sections: sectionsOf(v),
+    format: v.format,
     version: v.version,
     authorName: v.authorName,
     updatedAt: v.createdAt,
@@ -35,37 +42,51 @@ function live(v: PromptVersion) {
   };
 }
 
-// GET / — the prompt plus everything the app has learned about the team
+// GET / — the live prompt. (Learned facts moved to /api/facts.)
 app.get("/", async (c) => {
-  const [version, facts] = await Promise.all([currentVersion(), getTeamFacts()]);
-  return c.json({ ...live(version), facts });
+  return c.json(live(await currentVersion()));
 });
 
-// PUT / — save edited instructions as a new version.
+// PUT / — save edited instructions as a new version. The editor sends
+// `sections`; a plain `prompt` string is still accepted so a tab opened
+// before a deploy can still save its work.
 //
 // `baseVersion` is what the editor loaded. If it's stale we refuse and hand
 // back what's live, so two teachers editing at once can see both texts instead
 // of one of them silently losing their work.
 app.put("/", async (c) => {
-  const { prompt, baseVersion, note } = await c.req.json<{
-    prompt: string;
+  const { sections, prompt, baseVersion, note } = await c.req.json<{
+    sections?: unknown;
+    prompt?: string;
     baseVersion: number;
     note?: string;
   }>();
 
-  if (typeof prompt !== "string" || !prompt.trim()) {
-    return c.json({ error: "The prompt can't be empty." }, 400);
-  }
   if (!Number.isInteger(baseVersion)) {
     return c.json({ error: "Missing baseVersion — reload the page and try again." }, 400);
   }
 
-  const result = await savePromptVersion({
-    text: prompt,
-    baseVersion,
-    authorId: c.get("teacherId"),
-    note: note?.trim() || null,
-  });
+  let result;
+  if (sections !== undefined) {
+    const checked = validateSections(sections);
+    if (!checked.ok) return c.json({ error: checked.error }, 400);
+    result = await saveSections({
+      sections: checked.sections,
+      baseVersion,
+      authorId: c.get("teacherId"),
+      note: note?.trim() || null,
+    });
+  } else {
+    if (typeof prompt !== "string" || !prompt.trim()) {
+      return c.json({ error: "The prompt can't be empty." }, 400);
+    }
+    result = await savePromptVersion({
+      text: prompt,
+      baseVersion,
+      authorId: c.get("teacherId"),
+      note: note?.trim() || null,
+    });
+  }
 
   if (!result.ok) {
     return c.json(
@@ -114,26 +135,6 @@ app.post("/rollback", async (c) => {
   }
 
   return c.json({ ok: true, ...live(result.version) });
-});
-
-// PATCH /facts/:id — fix a learned fact that came out slightly wrong
-app.patch("/facts/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  const { text } = await c.req.json<{ text: string }>();
-  if (!id) return c.json({ error: "Invalid id" }, 400);
-  if (typeof text !== "string" || !text.trim()) {
-    return c.json({ error: "Fact text can't be empty." }, 400);
-  }
-  await db.update(teamFacts).set({ text: text.trim() }).where(eq(teamFacts.id, id));
-  return c.json({ ok: true });
-});
-
-// DELETE /facts/:id — drop a fact that's wrong or no longer true
-app.delete("/facts/:id", async (c) => {
-  const id = Number(c.req.param("id"));
-  if (!id) return c.json({ error: "Invalid id" }, 400);
-  await db.delete(teamFacts).where(eq(teamFacts.id, id));
-  return c.json({ ok: true });
 });
 
 export default app;

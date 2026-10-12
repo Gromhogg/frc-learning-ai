@@ -1,12 +1,36 @@
 import { api } from "./api";
 
-/** The instructions as they stand right now, plus who last touched them. */
+/** One editable piece of the instructions. `title` is a label for teachers;
+ * `body` is the verbatim text the AI sees when the section is enabled. */
+export interface PromptSection {
+  id: string;
+  title: string;
+  body: string;
+  enabled: boolean;
+}
+
+/** The instructions as they stand right now, plus who last touched them.
+ * `prompt` is the assembled text; `sections` is what the editor edits. */
 export interface LivePrompt {
   prompt: string;
+  sections: PromptSection[];
+  format: "text" | "sections@1";
   version: number;
   authorName: string;
   updatedAt: string | null;
   note: string | null;
+}
+
+/**
+ * Client mirror of the server's assembly rule: enabled sections' bodies,
+ * in order, blank line between. Kept deliberately tiny so the preview and
+ * conflict diff can't drift from what the server will actually build.
+ */
+export function assembleSections(sections: PromptSection[]): string {
+  return sections
+    .filter((s) => s.enabled)
+    .map((s) => s.body)
+    .join("\n\n");
 }
 
 /** One row in the history list — no text body, so the list stays small. */
@@ -19,14 +43,8 @@ export interface VersionMeta {
   size: number;
 }
 
-export interface TeamFact {
-  id: number;
-  text: string;
-  mentionCount: number;
-}
-
 export function fetchLive() {
-  return api<LivePrompt & { facts: TeamFact[] }>("/api/prompt");
+  return api<LivePrompt>("/api/prompt");
 }
 
 export function fetchHistory() {
@@ -44,10 +62,10 @@ export function restoreVersion(version: number) {
   });
 }
 
-export function savePrompt(prompt: string, baseVersion: number, note?: string) {
+export function saveSections(sections: PromptSection[], baseVersion: number, note?: string) {
   return api<LivePrompt & { ok: true }>("/api/prompt", {
     method: "PUT",
-    body: JSON.stringify({ prompt, baseVersion, note }),
+    body: JSON.stringify({ sections, baseVersion, note }),
   });
 }
 

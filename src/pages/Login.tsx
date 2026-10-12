@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/auth-context";
 import { api, API_BASE } from "../lib/api";
+import { buttonClass } from "../lib/button-styles";
+import Collapse from "../components/collapse";
 import type { AuthUser } from "../context/auth-context";
 
 export default function Login() {
@@ -57,11 +59,19 @@ export default function Login() {
   const inputClass =
     "w-full rounded-xl border-2 border-[var(--border)] bg-[var(--code-bg)] px-4 py-2.5 text-sm text-[var(--text-h)] placeholder:text-[var(--text)] hover:border-[var(--accent-border)] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] transition-colors";
 
+  // Signup-only fields sit in the form's gap-3 flow. The Collapse pulls
+  // itself up by 10px and pads its content by the same 10px + 2px of ring
+  // room on every side, so spacing is identical open or closed and a focus
+  // ring on the inner input isn't clipped by the height animation.
+  const signupOnly = "-mt-[0.625rem] -mx-0.5 -mb-0.5";
+  const signupInner = "pt-[0.625rem] px-0.5 pb-0.5";
+  const isSignup = mode === "signup";
+
   return (
     <main className="min-h-screen flex items-center justify-center bg-[var(--bg)] px-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-[var(--text-h)]">Robotics Chat</h1>
+          <h1 className="text-2xl font-bold text-[var(--text-h)]">Robotics Agent</h1>
           <p className="text-sm text-[var(--text)] mt-2">
             Ask anything about FRC, the shop, or the robot.
           </p>
@@ -70,7 +80,11 @@ export default function Login() {
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--card-bg)] p-6">
           <a
             href={`${API_BASE}/auth/google`}
-            className="w-full flex items-center justify-center gap-2.5 px-4 py-2.5 rounded-xl border-2 border-[var(--border)] text-sm font-semibold text-[var(--text-h)] hover:border-[var(--accent-border)] transition-colors"
+            className={buttonClass(
+              "bare",
+              "md",
+              "w-full border-2 border-[var(--border)] font-semibold text-[var(--text-h)] hover:border-[var(--accent-border)] hover:bg-[var(--code-bg)]",
+            )}
           >
             <svg width="16" height="16" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" />
@@ -91,19 +105,21 @@ export default function Login() {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={mode === "signup" ? "Your name" : "Name or email"}
+              placeholder={isSignup ? "Your name" : "Name or email"}
               className={inputClass}
             />
 
-            {mode === "signup" && (
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Email"
-                className={inputClass}
-              />
-            )}
+            <Collapse open={isSignup} className={signupOnly}>
+              <div className={signupInner}>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="Email"
+                  className={inputClass}
+                />
+              </div>
+            </Collapse>
 
             <input
               type="password"
@@ -113,8 +129,8 @@ export default function Login() {
               className={inputClass}
             />
 
-            {mode === "signup" && (
-              <div>
+            <Collapse open={isSignup} className={signupOnly}>
+              <div className={signupInner}>
                 <input
                   type="password"
                   value={teacherCode}
@@ -126,27 +142,38 @@ export default function Login() {
                   Leave blank if you're a student.
                 </p>
               </div>
-            )}
+            </Collapse>
 
-            {error && <p className="text-xs text-red-400 px-1">{error}</p>}
+            {error && <p className="text-xs text-red-400 px-1 animate-fade-in">{error}</p>}
 
-            <button
-              type="submit"
-              disabled={busy}
-              className="w-full px-4 py-2.5 rounded-xl bg-[var(--accent)] text-white text-sm font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity"
-            >
-              {busy ? "…" : mode === "signup" ? "Create account" : "Sign in"}
+            <button type="submit" disabled={busy} className={buttonClass("primary", "md", "w-full")}>
+              {busy ? (
+                <span
+                  aria-label="Signing in"
+                  className="block w-4 h-4 rounded-full border-2 border-white/70 border-t-transparent animate-spin"
+                />
+              ) : (
+                <span key={mode} className="animate-fade-in">
+                  {isSignup ? "Create account" : "Sign in"}
+                </span>
+              )}
             </button>
           </form>
 
           <button
             onClick={() => {
-              setMode(mode === "signin" ? "signup" : "signin");
+              setMode(isSignup ? "signin" : "signup");
               setError(null);
             }}
-            className="w-full mt-4 text-xs text-[var(--text)] hover:text-[var(--accent)] transition-colors"
+            className={buttonClass(
+              "bare",
+              "xs",
+              "w-full mt-3 text-[var(--text)] hover:text-[var(--accent)] hover:bg-[var(--code-bg)]",
+            )}
           >
-            {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+            <span key={mode} className="animate-fade-in">
+              {isSignup ? "Already have an account? Sign in" : "New here? Create an account"}
+            </span>
           </button>
         </div>
       </div>

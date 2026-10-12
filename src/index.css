@@ -1,5 +1,39 @@
 @import "tailwindcss";
 
+/* ── Motion tokens ────────────────────────────────────────────────────────── */
+/* Duration scale used across the app (bare Tailwind `duration-*` numbers):
+   75 press-down · 150 hover/colour · 200 expand, dropdown, sidebar ·
+   220 message bubbles · 260 drawer.
+
+   Easings become the ease-out-quart and ease-spring utilities: the first is
+   a fast start with a soft settle (enters, expands), the second overshoots
+   a touch (dots, chips). The default timing function swaps the Tailwind
+   ease-in-out default for ease-out so every hover reads snappier app-wide.
+
+   The animate tokens become animate-fade-in, animate-rise-in, animate-pop-in
+   and animate-slide-in-right. "both" keeps an element invisible until its
+   animation-delay elapses, so staggering works. Keyframes use the standalone
+   translate and scale properties (not transform) so they compose with the
+   rotate and scale utilities on the same element.
+
+   The @theme block accepts only custom properties and @keyframes, so keep
+   comments out of it. */
+@theme {
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);
+  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --default-transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
+
+  --animate-fade-in:        fade-in 150ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  --animate-rise-in:        rise-in 220ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  --animate-pop-in:         pop-in 180ms cubic-bezier(0.25, 1, 0.5, 1) both;
+  --animate-slide-in-right: slide-in-right 260ms cubic-bezier(0.25, 1, 0.5, 1) both;
+
+  @keyframes fade-in        { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes rise-in        { from { opacity: 0; translate: 0 6px; } to { opacity: 1; translate: 0 0; } }
+  @keyframes pop-in         { from { opacity: 0; scale: 0.96; translate: 0 -4px; } to { opacity: 1; scale: 1; translate: 0 0; } }
+  @keyframes slide-in-right { from { translate: 100% 0; } to { translate: 0 0; } }
+}
+
 /* ── Design tokens — dark-first ───────────────────────────────────────────── */
 :root {
   --text:           #a3a3a3; /* neutral-400 */
@@ -7,6 +41,7 @@
   --bg:             #0a0a0a; /* near-black */
   --card-bg:        #171717; /* neutral-900 */
   --border:         #2a2a2a; /* neutral-800 */
+  --border-hover:   #3a3a3a; /* cards and outline buttons on hover */
   --code-bg:        #171717; /* neutral-900 */
   --accent:         #f97316; /* orange-500 */
   --accent-hover:   #fb923c; /* orange-400 */
@@ -83,3 +118,18 @@ select {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #404040; }
+
+/* ── Reduced motion ───────────────────────────────────────────────────────── */
+/* Near-zero rather than zero so animationend/transitionend still fire. */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  /* Progress spinners are feedback, not decoration — keep them turning. */
+  .animate-spin {
+    animation-duration: 1s !important;
+    animation-iteration-count: infinite !important;
+  }
+}

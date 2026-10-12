@@ -15,6 +15,13 @@
       "when": 1787636464025,
       "tag": "0001_elite_stature",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787966281468,
+      "tag": "0002_melodic_lilandra",
+      "breakpoints": true
     }
   ]
 }

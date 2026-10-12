@@ -1,16 +1,39 @@
 import { Hono } from "hono";
-import { streamText, convertToModelMessages, type UIMessage } from "ai";
+import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { eq, and } from "drizzle-orm";
+import { z } from "zod";
 import { db } from "../../db/index.ts";
 import { conversations, messages as messagesTable } from "../../db/schema.ts";
 import { getAuth } from "../lib/require-auth.ts";
 import { buildSystemPrompt } from "../lib/prompt.ts";
+import { listDocs, readDoc } from "../lib/docs.ts";
 import { inlineLocalImages } from "../lib/uploads.ts";
-import { learnFromExchange } from "../lib/learn.ts";
-import { CHAT_MODEL } from "../lib/config.ts";
+import { noteExchange } from "../lib/learn.ts";
+import { CHAT_MODEL, MAX_DOC_READS_PER_TURN } from "../lib/config.ts";
 
 const app = new Hono();
+
+// Lets the AI open one reference doc from the library mid-answer. Defined
+// once at module scope on purpose: the tool definition sits ahead of the
+// system prompt in Anthropic's cache prefix, so it has to be byte-identical
+// between requests or every turn would miss the prompt cache.
+const readDocTool = tool({
+  description:
+    "Open one document from the team's reference library (the REFERENCE DOCS list " +
+    "in your instructions). Use it when a question needs machine procedures, specs, " +
+    "or safety details. Pass the exact filename from the list.",
+  inputSchema: z.object({
+    name: z.string().describe('Exact filename from the reference docs list, e.g. "vertical-mill.md"'),
+  }),
+  execute: async ({ name }) => {
+    const doc = readDoc(name);
+    if (doc) return doc;
+    // A structured miss instead of a throw, so the model can pick the right
+    // name on its next step rather than giving up.
+    return { error: `No doc named "${name}".`, available: listDocs().map((d) => d.name) };
+  },
+});
 
 /** Pull the plain text out of a UIMessage's parts. */
 function textOf(message: UIMessage): string {
@@ -88,7 +111,18 @@ app.post("/", async (c) => {
       },
       ...modelMessages,
     ],
-    onFinish: async ({ text }) => {
+    tools: { read_doc: readDocTool },
+    // Without this, the SDK stops after the first step — a turn that starts
+    // with a read_doc call would end there, doc in hand but no answer sent.
+    stopWhen: stepCountIs(MAX_DOC_READS_PER_TURN + 1),
+    onFinish: async (event) => {
+      // `event.text` is only the LAST step's text. When the model read a doc
+      // mid-answer there are several steps, and anything it said before the
+      // tool call would be silently dropped — so join every step's text.
+      const text = event.steps
+        .map((step) => step.text)
+        .filter(Boolean)
+        .join("\n\n");
       try {
         await db.insert(messagesTable).values({
           conversationId,
@@ -103,9 +137,9 @@ app.post("/", async (c) => {
         console.error("Failed to save assistant message:", err);
       }
 
-      // Deliberately not awaited — the student already has their answer and
-      // shouldn't wait on background bookkeeping.
-      void learnFromExchange(userText, text, userImages.length > 0);
+      // Just a wake-up nudge — the background sweep extracts facts from the
+      // whole conversation once it goes quiet, one batched call per session.
+      noteExchange(conversationId);
     },
   });
 

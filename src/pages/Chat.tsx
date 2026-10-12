@@ -8,6 +8,7 @@ import Composer, { type Attachment } from "../components/composer";
 import TeacherCodeDialog from "../components/teacher-code-dialog";
 import { useAuth } from "../context/auth-context";
 import { api, API_BASE } from "../lib/api";
+import { buttonClass } from "../lib/button-styles";
 
 interface StoredMessage {
   id: number;
@@ -156,8 +157,8 @@ export default function Chat() {
       <aside
         className={[
           "fixed md:static inset-y-0 left-0 z-40 w-64 flex-shrink-0",
-          "border-r border-[var(--border)] bg-[var(--card-bg)]",
-          "transition-transform duration-200",
+          "border-r border-[var(--border)] bg-[var(--card-bg)] shadow-2xl md:shadow-none",
+          "transition-transform duration-200 ease-out-quart",
           sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
         ].join(" ")}
       >
@@ -170,12 +171,15 @@ export default function Chat() {
         />
       </aside>
 
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 z-30 bg-black/50 md:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* Always mounted so it fades in step with the sidebar sliding. */}
+      <div
+        aria-hidden
+        onClick={() => setSidebarOpen(false)}
+        className={[
+          "fixed inset-0 z-30 bg-black/50 md:hidden transition-opacity duration-200",
+          sidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none",
+        ].join(" ")}
+      />
 
       <div className="flex flex-col flex-1 min-w-0">
         <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)] bg-[var(--card-bg)] flex-shrink-0">
@@ -183,20 +187,21 @@ export default function Chat() {
             <button
               onClick={() => setSidebarOpen((v) => !v)}
               aria-label="Toggle chat list"
-              className="md:hidden p-2 -ml-2 rounded-lg text-[var(--text-h)] hover:bg-[var(--code-bg)] transition-colors"
+              aria-expanded={sidebarOpen}
+              className={buttonClass("bare", "icon-sm", "md:hidden -ml-2 text-[var(--text-h)] hover:bg-[var(--code-bg)]")}
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
                 <line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="12" x2="21" y2="12" /><line x1="3" y1="18" x2="21" y2="18" />
               </svg>
             </button>
-            <span className="text-sm font-semibold text-[var(--text-h)]">Robotics Chat</span>
+            <span className="text-sm font-semibold text-[var(--text-h)]">Robotics Agent</span>
           </div>
 
           <div className="flex items-center gap-2">
             {user.role === "teacher" && (
               <button
                 onClick={() => navigate("/prompt")}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--text)] hover:bg-[var(--code-bg)] hover:text-[var(--accent)] transition-colors"
+                className={buttonClass("bare", "sm", "font-medium text-[var(--text)] hover:bg-[var(--code-bg)] hover:text-[var(--accent)]")}
               >
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="15" height="15">
                   <circle cx="12" cy="12" r="3" />
@@ -210,7 +215,9 @@ export default function Chat() {
               <button
                 onClick={() => setMenuOpen((v) => !v)}
                 onBlur={() => setTimeout(() => setMenuOpen(false), 150)}
-                className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-[var(--code-bg)] transition-colors"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                className={buttonClass("ghost", "sm")}
               >
                 {user.avatarUrl ? (
                   <img src={user.avatarUrl} alt="" className="w-7 h-7 rounded-full" />
@@ -223,7 +230,7 @@ export default function Chat() {
               </button>
 
               {menuOpen && (
-                <div className="absolute right-0 mt-2 w-52 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] shadow-2xl overflow-hidden z-50">
+                <div className="absolute right-0 mt-2 w-52 rounded-xl border border-[var(--border)] bg-[var(--card-bg)] shadow-2xl overflow-hidden z-50 origin-top-right animate-pop-in">
                   <div className="px-4 py-2.5 border-b border-[var(--border)]">
                     <p className="text-sm font-semibold text-[var(--text-h)] truncate">{user.name}</p>
                     <p className="text-[10px] uppercase tracking-wide font-semibold text-[var(--accent)] mt-0.5">
