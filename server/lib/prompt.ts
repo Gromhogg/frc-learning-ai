@@ -94,7 +94,7 @@ export function sectionsOf(v: PromptVersion): PromptSection[] {
   return parseDoc(v.text, v.format).sections;
 }
 
-/** The teacher-editable instructions, as plain text. */
+/** The admin-editable instructions, as plain text. */
 export async function getBasePrompt(): Promise<string> {
   return assembledTextOf(await currentVersion());
 }
@@ -132,7 +132,7 @@ export async function savePromptVersion(input: {
   return { ok: true, version: await currentVersion() };
 }
 
-/** Save a teacher's edited sections as the next version. */
+/** Save an admin's edited sections as the next version. */
 export async function saveSections(input: {
   sections: PromptSection[];
   baseVersion: number;
@@ -150,7 +150,7 @@ export async function saveSections(input: {
 
 /**
  * Append a version written by the app itself rather than a person — used by
- * the one-time docs migration. Same append-only rules as a teacher save; a
+ * the one-time docs migration. Same append-only rules as an admin save; a
  * lost race just means recomputing `next` and trying again.
  */
 export async function appendSystemVersion(
@@ -190,7 +190,7 @@ export async function rollbackTo(
 }
 
 /**
- * The full system prompt sent to Claude: the teacher's instructions, the
+ * The full system prompt sent to Claude: the admin's instructions, the
  * index of reference docs the AI can open with read_doc, and whatever the
  * app has learned about this specific team's hardware.
  *
@@ -199,8 +199,8 @@ export async function rollbackTo(
  *
  * Every block here keeps a stable order between requests. Anthropic's prompt
  * cache is a prefix match: the doc index sorts by filename (it only changes
- * when a teacher edits the library), and the facts block holds only APPROVED
- * facts ordered by id — so its bytes change only when a teacher acts on the
+ * when an admin edits the library), and the facts block holds only APPROVED
+ * facts ordered by id — so its bytes change only when an admin acts on the
  * review queue, never behind anyone's back. Reinforcements bump counters
  * that this block deliberately doesn't print.
  */

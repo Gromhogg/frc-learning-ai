@@ -12,7 +12,7 @@ import { DOCS_DIR, DOCS_TRASH_DIR } from "./config.ts";
 import { DEFAULT_DOCS } from "./default-docs.ts";
 
 // The reference docs the AI can open mid-answer. Plain files on disk, no
-// database: the directory listing is the source of truth, so a teacher can
+// database: the directory listing is the source of truth, so an admin can
 // also manage docs straight from the filesystem if they want to.
 //
 // Nothing here is ever destroyed. "Replace" and "delete" move the old file
@@ -153,7 +153,7 @@ let seedChecked = false;
 /**
  * Write the default docs the first time the library is used — but only when
  * the folder doesn't exist at all. A folder that exists and is empty means a
- * teacher deleted everything on purpose, and that choice is respected.
+ * admin deleted everything on purpose, and that choice is respected.
  */
 export function ensureDocsSeeded(): void {
   if (seedChecked) return;
@@ -170,7 +170,7 @@ export function ensureDocsSeeded(): void {
  * The listing the AI sees in its system prompt: filenames plus first-line
  * titles, nothing more. The contents only cost tokens when the model actually
  * opens a doc with the read_doc tool. Byte-identical between requests until a
- * teacher changes a file — the same cache-friendliness rule as the rest of
+ * admin changes a file — the same cache-friendliness rule as the rest of
  * the prompt (see buildSystemPrompt).
  */
 export function buildDocIndex(): string {

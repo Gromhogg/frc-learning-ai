@@ -1,55 +1,17 @@
 import { Hono } from "hono";
-import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai";
-import { createAnthropic } from "@ai-sdk/anthropic";
-import { eq, and } from "drizzle-orm";
-import { z } from "zod";
+import { streamSSE } from "hono/streaming";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { conversations, messages as messagesTable } from "../../db/schema.ts";
+import { conversations, messageFeedback, messages } from "../../db/schema.ts";
 import { getAuth } from "../lib/require-auth.ts";
-import { buildSystemPrompt } from "../lib/prompt.ts";
-import { listDocs, readDoc } from "../lib/docs.ts";
-import { inlineLocalImages } from "../lib/uploads.ts";
+import { readImageForModel, MAX_IMAGES_PER_MESSAGE } from "../lib/uploads.ts";
 import { noteExchange } from "../lib/learn.ts";
-import { CHAT_MODEL, MAX_DOC_READS_PER_TURN } from "../lib/config.ts";
+import { createTutor, describeTutorStep } from "../agents/tutor.ts";
+import { historyToMessages, runAgentTurn, type ClientEvent } from "../ai/run-agent.ts";
+import { tutorModel } from "../ai/models.ts";
+import type { ImageContent } from "@mariozechner/pi-ai";
 
 const app = new Hono();
-
-// Lets the AI open one reference doc from the library mid-answer. Defined
-// once at module scope on purpose: the tool definition sits ahead of the
-// system prompt in Anthropic's cache prefix, so it has to be byte-identical
-// between requests or every turn would miss the prompt cache.
-const readDocTool = tool({
-  description:
-    "Open one document from the team's reference library (the REFERENCE DOCS list " +
-    "in your instructions). Use it when a question needs machine procedures, specs, " +
-    "or safety details. Pass the exact filename from the list.",
-  inputSchema: z.object({
-    name: z.string().describe('Exact filename from the reference docs list, e.g. "vertical-mill.md"'),
-  }),
-  execute: async ({ name }) => {
-    const doc = readDoc(name);
-    if (doc) return doc;
-    // A structured miss instead of a throw, so the model can pick the right
-    // name on its next step rather than giving up.
-    return { error: `No doc named "${name}".`, available: listDocs().map((d) => d.name) };
-  },
-});
-
-/** Pull the plain text out of a UIMessage's parts. */
-function textOf(message: UIMessage): string {
-  return message.parts
-    .filter((p) => p.type === "text")
-    .map((p) => (p as { text: string }).text)
-    .join("")
-    .trim();
-}
-
-/** Pull attached image URLs out of a UIMessage's parts. */
-function imagesOf(message: UIMessage): string[] {
-  return message.parts
-    .filter((p) => p.type === "file" && (p as { mediaType?: string }).mediaType?.startsWith("image/"))
-    .map((p) => (p as { url: string }).url);
-}
 
 /** First line of the first question, used as the sidebar label. */
 function titleFrom(text: string): string {
@@ -58,33 +20,73 @@ function titleFrom(text: string): string {
   return `${oneLine.slice(0, 50).replace(/\s+\S*$/, "")}…`;
 }
 
+function imagesFor(paths: string[]): ImageContent[] {
+  return paths.map(readImageForModel).filter((i): i is ImageContent => i !== null);
+}
+
+// POST / — send a message (or retry the last answer) and stream the reply.
+//
+// Body: { conversationId, text, images? }  or  { conversationId, retry: true }
+//
+// The server owns the history: it loads saved messages from the database
+// rather than trusting whatever the browser sends.
 app.post("/", async (c) => {
   const auth = await getAuth(c);
   if (!auth) return c.json({ error: "Not signed in." }, 401);
 
-  const body = await c.req.json<{ messages: UIMessage[]; conversationId: number }>();
+  const body = await c.req.json<{
+    conversationId: number;
+    text?: string;
+    images?: string[];
+    retry?: boolean;
+  }>();
   const conversationId = Number(body.conversationId);
 
   const [conversation] = await db
     .select()
     .from(conversations)
     .where(and(eq(conversations.id, conversationId), eq(conversations.userId, auth.userId)));
-
   if (!conversation) return c.json({ error: "Conversation not found." }, 404);
 
-  const lastUserMessage = [...body.messages].reverse().find((m) => m.role === "user");
-  const userText = lastUserMessage ? textOf(lastUserMessage) : "";
-  const userImages = lastUserMessage ? imagesOf(lastUserMessage) : [];
+  let userText: string;
+  let userImages: string[];
+  let userMessageId: number | undefined;
 
-  // Save the student's message right away, so nothing is lost if the
-  // stream drops halfway through.
-  if (lastUserMessage) {
-    await db.insert(messagesTable).values({
-      conversationId,
-      role: "user",
-      text: userText,
-      images: JSON.stringify(userImages),
-    });
+  if (body.retry) {
+    // Drop the last answer (and any thumbs on it), then re-answer the last
+    // question as-is.
+    const [last] = await db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(desc(messages.id))
+      .limit(1);
+    if (last?.role === "assistant") {
+      await db.delete(messageFeedback).where(eq(messageFeedback.messageId, last.id));
+      await db.delete(messages).where(eq(messages.id, last.id));
+    }
+    const [question] = await db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.role, "user")))
+      .orderBy(desc(messages.id))
+      .limit(1);
+    if (!question) return c.json({ error: "Nothing to retry." }, 400);
+    userText = question.text;
+    userImages = JSON.parse(question.images) as string[];
+  } else {
+    userText = (body.text ?? "").trim();
+    userImages = (body.images ?? [])
+      .filter((p) => typeof p === "string" && p.startsWith("/uploads/"))
+      .slice(0, MAX_IMAGES_PER_MESSAGE);
+    if (!userText && userImages.length === 0) return c.json({ error: "Empty message." }, 400);
+
+    // Save the question right away, so nothing is lost if the stream drops.
+    const [saved] = await db
+      .insert(messages)
+      .values({ conversationId, role: "user", text: userText, images: JSON.stringify(userImages) })
+      .returning({ id: messages.id });
+    userMessageId = saved.id;
 
     if (conversation.title === "New chat" && userText) {
       await db
@@ -94,56 +96,110 @@ app.post("/", async (c) => {
     }
   }
 
-  const systemPrompt = await buildSystemPrompt();
-  const modelMessages = inlineLocalImages(await convertToModelMessages(body.messages));
+  // Everything before the question being answered.
+  const rows = await db
+    .select()
+    .from(messages)
+    .where(eq(messages.conversationId, conversationId))
+    .orderBy(asc(messages.id));
+  const prior = rows.slice(0, -1).map((m) => ({
+    role: m.role,
+    text: m.text,
+    images: m.role === "user" ? imagesFor(JSON.parse(m.images) as string[]) : undefined,
+  }));
 
-  const anthropic = createAnthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const agent = await createTutor(historyToMessages(prior, tutorModel));
 
-  const result = streamText({
-    model: anthropic(CHAT_MODEL),
-    messages: [
-      {
-        role: "system",
-        content: systemPrompt,
-        // The prompt barely changes between messages, so caching it is a
-        // straight cost saving on every single turn.
-        providerOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-      },
-      ...modelMessages,
-    ],
-    tools: { read_doc: readDocTool },
-    // Without this, the SDK stops after the first step — a turn that starts
-    // with a read_doc call would end there, doc in hand but no answer sent.
-    stopWhen: stepCountIs(MAX_DOC_READS_PER_TURN + 1),
-    onFinish: async (event) => {
-      // `event.text` is only the LAST step's text. When the model read a doc
-      // mid-answer there are several steps, and anything it said before the
-      // tool call would be silently dropped — so join every step's text.
-      const text = event.steps
-        .map((step) => step.text)
-        .filter(Boolean)
-        .join("\n\n");
-      try {
-        await db.insert(messagesTable).values({
+  return streamSSE(c, async (stream) => {
+    stream.onAbort(() => agent.abort());
+    const send = (event: ClientEvent) => {
+      void stream.writeSSE({ data: JSON.stringify(event) });
+    };
+
+    const result = await runAgentTurn(
+      agent,
+      { text: userText, images: imagesFor(userImages) },
+      send,
+      describeTutorStep,
+    );
+
+    // Save whatever was written, even after a stop or an error, so the
+    // thread on screen matches the thread on disk.
+    let messageId = 0;
+    if (result.text || result.steps.length > 0) {
+      const [saved] = await db
+        .insert(messages)
+        .values({
           conversationId,
           role: "assistant",
-          text,
-        });
-        await db
-          .update(conversations)
-          .set({ updatedAt: new Date().toISOString() })
-          .where(eq(conversations.id, conversationId));
-      } catch (err) {
-        console.error("Failed to save assistant message:", err);
-      }
+          text: result.text,
+          steps: JSON.stringify(result.steps.map(({ id, tool, label }) => ({ id, tool, label, status: "done" }))),
+        })
+        .returning({ id: messages.id });
+      messageId = saved.id;
+    }
+    await db
+      .update(conversations)
+      .set({ updatedAt: new Date().toISOString() })
+      .where(eq(conversations.id, conversationId));
 
-      // Just a wake-up nudge — the background sweep extracts facts from the
-      // whole conversation once it goes quiet, one batched call per session.
-      noteExchange(conversationId);
-    },
+    if (result.error && result.error !== "Stopped.") send({ type: "error", message: result.error });
+    send({ type: "done", messageId, userMessageId });
+
+    // Just a wake-up nudge — the background sweep extracts facts from the
+    // whole conversation once it goes quiet, one batched call per session.
+    if (messageId) noteExchange(conversationId);
   });
+});
 
-  return result.toUIMessageStreamResponse();
+// POST /feedback — thumbs up/down on one answer: { messageId, rating, comment? }
+// Sending the same rating again clears it.
+app.post("/feedback", async (c) => {
+  const auth = await getAuth(c);
+  if (!auth) return c.json({ error: "Not signed in." }, 401);
+
+  const { messageId, rating, comment } = await c.req.json<{
+    messageId: number;
+    rating: "up" | "down" | null;
+    comment?: string;
+  }>();
+
+  // Only your own conversations' answers can be rated.
+  const [owned] = await db
+    .select({ id: messages.id })
+    .from(messages)
+    .innerJoin(conversations, eq(messages.conversationId, conversations.id))
+    .where(
+      and(
+        eq(messages.id, Number(messageId)),
+        eq(messages.role, "assistant"),
+        eq(conversations.userId, auth.userId),
+      ),
+    );
+  if (!owned) return c.json({ error: "Message not found." }, 404);
+
+  await db
+    .delete(messageFeedback)
+    .where(and(eq(messageFeedback.messageId, owned.id), eq(messageFeedback.userId, auth.userId)));
+  if (rating === "up" || rating === "down") {
+    await db.insert(messageFeedback).values({
+      messageId: owned.id,
+      userId: auth.userId,
+      rating,
+      comment: comment?.trim().slice(0, 500) || null,
+    });
+  }
+  return c.json({ ok: true });
 });
 
 export default app;
+
+/** Feedback for a set of messages, for showing the thumbs state on load. */
+export async function feedbackFor(messageIds: number[], userId: number) {
+  if (messageIds.length === 0) return new Map<number, "up" | "down">();
+  const rows = await db
+    .select({ messageId: messageFeedback.messageId, rating: messageFeedback.rating })
+    .from(messageFeedback)
+    .where(and(inArray(messageFeedback.messageId, messageIds), eq(messageFeedback.userId, userId)));
+  return new Map(rows.map((r) => [r.messageId, r.rating]));
+}

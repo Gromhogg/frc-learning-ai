@@ -1,5 +1,5 @@
 // The starting instructions for the AI. This is seeded into the database
-// once (see db/seed.ts); after that, teachers edit it in the app and this
+// once (see db/seed.ts); after that, admins edit it in the app and this
 // file is no longer read — the database is the source of truth.
 //
 // Deliberately short: behavior lives here, reference content lives in the

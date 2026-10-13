@@ -1,12 +1,29 @@
 // One place that knows where the server is, and how to talk to it.
-export const API_BASE = "http://localhost:3001";
+export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+
+const TOKEN_KEY = "auth_token";
+
+export function getToken(): string | null {
+  try {
+    return localStorage.getItem(TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setToken(token: string | null): void {
+  try {
+    if (token) localStorage.setItem(TOKEN_KEY, token);
+    else localStorage.removeItem(TOKEN_KEY);
+  } catch {
+    // Private windows can block storage; the session just won't persist.
+  }
+}
 
 /**
- * A failed request, with the server's reply still attached.
- *
- * Most callers only want `.message`, but some responses carry a payload worth
- * acting on — a 409 from the prompt editor includes whoever's version won, so
- * the page can show both texts instead of just an error string.
+ * A failed request, with the server's reply still attached. Some replies
+ * carry something worth acting on — a 409 includes whatever version won, so
+ * the page can show both instead of just an error.
  */
 export class ApiError extends Error {
   status: number;
@@ -20,10 +37,9 @@ export class ApiError extends Error {
   }
 }
 
-/** fetch() that attaches the saved login token and parses JSON. */
+/** fetch() that attaches the saved sign-in token and parses JSON. */
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem("auth_token");
-
+  const token = getToken();
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -38,6 +54,9 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     const message = (body as { error?: string } | null)?.error;
     throw new ApiError(message ?? `Request failed (${res.status})`, res.status, body);
   }
-
   return res.json() as Promise<T>;
+}
+
+export function errorMessage(err: unknown, fallback = "Something went wrong."): string {
+  return err instanceof Error && err.message ? err.message : fallback;
 }

@@ -8,7 +8,7 @@ import { appendSystemVersion, currentVersion } from "./prompt.ts";
 // One-time move of the old inline "SHOP & TEAM REFERENCE" section out of the
 // live prompt and into the docs library. Runs at every server start but does
 // its work exactly once, guarded by a settings flag — flag-based on purpose,
-// so a teacher who deliberately restores the old long prompt from history is
+// so an admin who deliberately restores the old long prompt from history is
 // never re-slimmed behind their back.
 
 const FLAG_KEY = "docs_migrated";
@@ -20,7 +20,7 @@ export async function ensureDocsMigrated(): Promise<void> {
     if (flag) return;
 
     // currentVersion() also carries a pre-versioning `settings` prompt into
-    // prompt_versions first, so we always split the text the teacher actually
+    // prompt_versions first, so we always split the text the admin actually
     // has live — their edits included — never the shipped default.
     const live = await currentVersion();
     const markerAt = live.text.indexOf(REFERENCE_MARKER);

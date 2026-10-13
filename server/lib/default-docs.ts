@@ -1,6 +1,6 @@
 // The reference docs a fresh install starts with. These are written into
 // DOCS_DIR once (see ensureDocsSeeded in docs.ts); after that the filesystem
-// is the source of truth and teachers manage the files from the prompt page.
+// is the source of truth and admins manage the files from the prompt page.
 //
 // Each doc's first line is its title — it's what shows up in the doc index
 // the AI sees, so keep it short and descriptive.

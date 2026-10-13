@@ -1,4 +1,4 @@
-import type { Context } from "hono";
+import type { Context, MiddlewareHandler } from "hono";
 import { verifyToken, type TokenPayload } from "./jwt.ts";
 
 /**
@@ -12,13 +12,23 @@ export async function getAuth(c: Context): Promise<TokenPayload | null> {
 }
 
 /**
- * Same, but for teacher-only endpoints.
+ * Same, but for admin-only endpoints.
  *
  * This check has to live on the server. Hiding the button in the UI stops
  * an honest student, not someone poking at the API with curl.
  */
-export async function getTeacher(c: Context): Promise<TokenPayload | null> {
+export async function getAdmin(c: Context): Promise<TokenPayload | null> {
   const auth = await getAuth(c);
-  if (!auth || auth.role !== "teacher") return null;
+  if (!auth || auth.role !== "admin") return null;
   return auth;
 }
+
+export type AdminEnv = { Variables: { adminId: number } };
+
+/** Middleware: refuse anyone who isn't an admin, and remember who is. */
+export const requireAdmin: MiddlewareHandler<AdminEnv> = async (c, next) => {
+  const admin = await getAdmin(c);
+  if (!admin) return c.json({ error: "Admins only." }, 403);
+  c.set("adminId", admin.userId);
+  await next();
+};

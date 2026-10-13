@@ -1,4 +1,4 @@
-// The structured form of the teacher-editable instructions: an ordered list
+// The structured form of the admin-editable instructions: an ordered list
 // of sections, each individually editable, reorderable, and toggleable.
 //
 // A whole document is stored per version in prompt_versions.text (tagged
@@ -73,7 +73,7 @@ export function parseDoc(text: string, format: string): PromptDoc {
 }
 
 /**
- * Gate for teacher-submitted sections. Normalizes titles (trim) but leaves
+ * Gate for admin-submitted sections. Normalizes titles (trim) but leaves
  * bodies byte-for-byte alone — parseDoc runs stored rows through this same
  * check, so any body rewrite here would make a stored document assemble to
  * different bytes than the ones verified at save time.

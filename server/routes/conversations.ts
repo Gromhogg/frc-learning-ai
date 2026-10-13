@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, inArray } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { conversations, messages } from "../../db/schema.ts";
+import { conversations, messageFeedback, messages, teamFacts } from "../../db/schema.ts";
 import { getAuth } from "../lib/require-auth.ts";
+import { feedbackFor } from "./chat.ts";
 
 const app = new Hono();
 
@@ -43,9 +44,19 @@ app.get("/:id", async (c) => {
     .where(eq(messages.conversationId, id))
     .orderBy(messages.id);
 
+  const ratings = await feedbackFor(
+    rows.filter((m) => m.role === "assistant").map((m) => m.id),
+    auth.userId,
+  );
+
   return c.json({
     ...conversation,
-    messages: rows.map((m) => ({ ...m, images: JSON.parse(m.images) as string[] })),
+    messages: rows.map((m) => ({
+      ...m,
+      images: JSON.parse(m.images) as string[],
+      steps: JSON.parse(m.steps) as unknown[],
+      rating: ratings.get(m.id) ?? null,
+    })),
   });
 });
 
@@ -77,8 +88,18 @@ app.delete("/:id", async (c) => {
 
   if (!conversation) return c.json({ error: "Not found" }, 404);
 
-  // Messages first — they reference the conversation.
+  // Children first — feedback references messages, messages reference the
+  // conversation.
+  const ids = (
+    await db.select({ id: messages.id }).from(messages).where(eq(messages.conversationId, id))
+  ).map((m) => m.id);
+  if (ids.length > 0) await db.delete(messageFeedback).where(inArray(messageFeedback.messageId, ids));
   await db.delete(messages).where(eq(messages.conversationId, id));
+  // Learned facts outlive the chat they came from — just unlink them.
+  await db
+    .update(teamFacts)
+    .set({ sourceConversationId: null })
+    .where(eq(teamFacts.sourceConversationId, id));
   await db.delete(conversations).where(eq(conversations.id, id));
 
   return c.json({ ok: true });

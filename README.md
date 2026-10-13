@@ -1,29 +1,41 @@
-# Robotics Chat
+# Robotics Mentor
 
-A chat app for FRC robotics teams. Students ask questions about the shop,
-the robot, wiring, CAD, or the game — in text or by sending a photo — and an
-AI mentor answers. Past chats are saved in a sidebar.
+A chat app for an FRC robotics team. Students ask about the shop, the robot,
+wiring, CAD, or code — in text or with a photo — and an AI mentor answers.
+
+**It gets better over time.** Three things help the AI improve, and a mentor
+approves every change before students see it:
+
+1. **Suggestions.** Once a day, an AI reviewer reads recent student chats
+   (thumbs-down answers first, names removed) and suggests changes to the AI's
+   instructions. Mentors see what would change and click **Apply** or
+   **Dismiss**.
+2. **Prompt assistant.** Mentors can just ask, e.g. "make answers shorter for
+   beginners". The assistant drafts the change, and the mentor applies it.
+3. **Team facts.** The app picks up facts about *your* team from chats
+   ("the drivetrain uses Kraken motors"). Mentors approve them before the AI
+   uses them.
 
 There are two kinds of people:
 
-- **Students** — chat, and that's it.
-- **Teachers** — chat, *and* can edit the instructions the AI follows.
+| | Student | Admin (mentor) |
+| --- | --- | --- |
+| Chat, send photos, keep history | ✅ | ✅ |
+| Thumbs up / down on answers | ✅ | ✅ |
+| Edit the AI's instructions, apply suggestions | ❌ | ✅ |
+| Review team facts, manage reference docs | ❌ | ✅ |
 
-Teachers cannot read student conversations. The only thing on the teacher
-side is the prompt.
-
-**The app learns your team.** As people chat, it quietly picks up facts about
-*your* specific robot and shop — "the drivetrain uses REV NEO motors", "the
-Avid is the CNC router" — and adds them to the AI's instructions. So when
-someone later asks "what's wrong with the motor?", the AI knows which motor
-they mean. Teachers can see and delete these on the prompt page.
+The admin code is the only way to become an admin: type it when you sign up,
+or later from your name menu → **I'm a mentor (admin code)**. The server
+checks this on every admin request, not just in the screen.
 
 Built with:
-- **Frontend** — React 19 + Vite + Tailwind + react-router (`src/`)
-- **Backend** — Hono + Node, served via `tsx` (`server/`)
-- **Database** — SQLite via better-sqlite3 + Drizzle ORM (`db/`)
-- **AI** — Anthropic Claude (via `@ai-sdk/anthropic` + Vercel AI SDK v6)
-- **Auth** — JWT (jose) + bcrypt password hashes, plus Google sign-in (arctic)
+- **Screens** — React 19, Vite, Tailwind, Radix menus and dialogs (`src/`)
+- **Server** — Hono on Node (`server/`)
+- **AI** — Claude, run through the [Pi](https://pi.dev) agent kit
+  (`@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`)
+- **Database** — SQLite with Drizzle (`db/`)
+- **Sign-in** — name + password, or Google
 
 ---
 
@@ -81,21 +93,21 @@ Three lines matter:
 - `ANTHROPIC_API_KEY=` — paste your `sk-ant-…` key here.
 - `JWT_SECRET=` — type a long random string of letters and numbers. It
   doesn't matter what, as long as it's long and you keep it private.
-- `TEACHER_CODE=` — make up a code. Anyone who types this becomes a
-  teacher, so only give it to mentors.
+- `ADMIN_CODE=` — make up a code. Anyone who types this becomes an
+  admin, so only give it to mentors.
 
 You can leave the two `GOOGLE_` lines alone — the app works fine without
 Google sign-in.
 
 Save and close.
 
-**5. Set up the database.**
+**5. Load the starting instructions.**
 ```bash
-npm run db:migrate
 npm run db:seed
 ```
-The first creates the file that stores accounts and chats. The second loads
-the AI's starting instructions. You only do this once.
+This creates the database and loads the AI's starting instructions. You only
+do this once. (The server also updates the database by itself each time it
+starts.)
 
 **6. Run it.**
 ```bash
@@ -105,8 +117,8 @@ Leave this Terminal window open — closing it stops the app. When you see
 `Local: http://localhost:5173`, open that address in your browser.
 
 **7. Make your account.**
-Click **Create an account**. If you're a mentor, put your teacher code in
-the "Teacher code" box. Students leave it blank.
+Click **Create an account**. If you're a mentor, put your admin code in
+the "Admin code" box. Students leave it blank.
 
 To stop the app, come back to the Terminal and press
 <kbd>Control</kbd> + <kbd>C</kbd>. To run it again later, just `cd
@@ -116,81 +128,47 @@ Learning-App` and `npm run dev:all` — steps 1–5 only happen once.
 
 ## Quick start (for developers)
 
-Prerequisites: **Node 20+** and **npm**.
+Prerequisites: **Node 22+** and **npm**.
 
 ```bash
-git clone https://github.com/Gromhogg/Learning-App.git
-cd Learning-App
 npm install
-cp .env.example .env      # fill in ANTHROPIC_API_KEY, JWT_SECRET, TEACHER_CODE
-npm run db:migrate        # creates data/app.db
-npm run db:seed           # loads the default system prompt
-npm run dev:all           # frontend :5173 + API :3001
+cp .env.example .env      # fill in ANTHROPIC_API_KEY, JWT_SECRET, ADMIN_CODE
+npm run db:seed           # creates data/app.db and loads the starting prompt
+npm run dev:all           # screens on :5173, server on :3001
 ```
 
-Optional: set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` to enable the
-Google button, with redirect URI `http://localhost:3001/auth/google/callback`.
+Optional: set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` for the Google
+button (redirect URI `http://localhost:3001/auth/google/callback`).
 
-`data/` is gitignored — the database and uploaded photos stay on your machine.
-
-> **Note:** if `npm run db:migrate` fails with `NODE_MODULE_VERSION`, your
-> Node version changed since `npm install`. Run `npm rebuild better-sqlite3`.
+`data/` is not saved in git — the database, photos, and docs stay on your
+machine. Older `.env` files that still say `TEACHER_CODE` keep working.
 
 ---
 
-## Roles
+## The AI agents
 
-Two roles, and the teacher code is the only way to get the second one.
+All three live in `server/agents/` and run on Pi.
 
-| | Student | Teacher |
+| Agent | Who uses it | What it can do |
 | --- | --- | --- |
-| Chat, send photos, keep history | ✅ | ✅ |
-| Edit the AI's instructions | ❌ | ✅ |
-| Review learned team facts | ❌ | ✅ |
-| Read anyone else's chats | ❌ | ❌ |
+| **Tutor** (`tutor.ts`) | Students | Answer, and open reference docs |
+| **Prompt assistant** (`prompt-editor.ts`) | Admins, on the Prompt page | Read the prompt, docs, and chats; **draft** changes |
+| **Reviewer** (`reviewer.ts`) | Runs daily, or from **Suggestions → Review recent chats** | Read recent chats; **draft** changes |
 
-Becoming a teacher:
-- **At signup** — type the code into the "Teacher code" box.
-- **Afterwards** — click your name in the top right → **Enter teacher code**.
-  (This is how Google sign-in users do it, since there's no signup form.)
+The assistant and reviewer can never change the live prompt themselves. They
+can only write a draft (`prompt_drafts` table). Applying a draft saves a normal
+new prompt version, so it shows in **History** and can be undone.
 
----
-
-## How the learning loop works
-
-After each reply, a background call looks at the exchange and pulls out any
-durable, team-specific facts — hardware brands, tool names, local shorthand.
-It runs *after* the student already has their answer, so it never slows the
-chat down, and a failure is logged without affecting anything.
-
-Facts are stored in the `team_facts` table with a mention count, and appended
-to the system prompt under a `TEAM CONTEXT` heading on every request. They
-apply immediately and teachers prune them on the prompt page. The list is
-capped at 60 (`MAX_TEAM_FACTS` in `server/lib/config.ts`) so it can't grow
-until it crowds out the actual instructions.
-
-The extractor is told to return nothing most of the time — it's meant to
-catch the occasional real fact, not to narrate every conversation.
-
----
-
-## Choosing a model
-
-Both models live in `server/lib/config.ts`:
+Models are set in `server/lib/config.ts`:
 
 ```ts
-export const CHAT_MODEL  = "claude-opus-5";   // answers students
-export const LEARN_MODEL = "claude-opus-5";   // background fact extraction
+export const TUTOR_MODEL  = "claude-sonnet-5-5"; // answers students
+export const EDITOR_MODEL = "claude-opus-5-5";   // prompt assistant + reviewer
+export const LEARN_MODEL  = "claude-haiku-5-5";  // picks up team facts
 ```
 
-| Model | Input / output per million tokens |
-| --- | --- |
-| `claude-opus-5` | $5 / $25 |
-| `claude-sonnet-5` | $3 / $15 |
-| `claude-haiku-4-5` | $1 / $5 |
-
-For a big team, switching `LEARN_MODEL` to `claude-haiku-4-5` cuts cost with
-no real downside — it's a small extraction task.
+Spending limits (reviews per day, facts per day, tool calls per message) are in
+the same file.
 
 ---
 
@@ -198,50 +176,30 @@ no real downside — it's a small extraction task.
 
 | Script | What it does |
 | --- | --- |
-| `npm run dev` | Frontend only (Vite on 5173) |
-| `npm run server` | Backend only (Hono/tsx on 3001) |
-| `npm run dev:all` | Both, concurrently — the usual command |
-| `npm run build` | Type-check + production build |
-| `npm run lint` | Run ESLint |
-| `npm run db:generate` | Generate a migration from `db/schema.ts` |
-| `npm run db:migrate` | Apply migrations to `data/app.db` |
-| `npm run db:seed` | Load the default system prompt |
+| `npm run dev:all` | Screens + server together — the usual command |
+| `npm run dev` | Screens only (port 5173) |
+| `npm run server` | Server only (port 3001) |
+| `npm run build` | Type check + production build |
+| `npm run lint` | Check code style |
+| `npm run db:generate` | Make a database update file from `db/schema.ts` |
+| `npm run db:seed` | Load the starting prompt and docs |
 
 ---
 
 ## Project layout
 
 ```
-src/                   React frontend
-  pages/               Login, Chat (the app), Prompt (teachers), AuthCallback
-  components/          Sidebar, message thread, composer, teacher-code dialog
-  context/             Auth provider and hook
-  lib/                 API helper, client-side image resizing
-server/                Hono API
-  routes/              auth, chat, conversations, docs, prompt, uploads
-  lib/                 config, prompt builder, docs library, learning loop, uploads, jwt
-db/                    Drizzle schema, migration runner, seed script
-drizzle/               Generated migrations
-data/                  SQLite DB + uploaded photos + reference docs (gitignored)
+src/                 Screens
+  pages/             Sign-in, chat
+  admin/             Admin pages: Prompt, Suggestions, Team facts, Docs, History
+  components/        Chat pieces and shared buttons, dialogs, menus
+  styles/theme.css   Colors (light + dark), fonts
+server/
+  agents/            Tutor, prompt assistant, reviewer, and their tools
+  ai/                Pi model setup and streaming
+  routes/            Sign-in, chat, and admin routes (routes/admin/*)
+  lib/               Prompt versions, drafts, docs, team facts, config
+db/                  Database tables
+drizzle/             Database update files (run on server start)
+data/                Database, photos, reference docs (not in git)
 ```
-
----
-
-## Editing what the AI knows
-
-Sign in as a teacher and click **Prompt**. The text box holds the AI's
-behavioral instructions — how it talks, safety rules, and a pointer to the
-reference docs. Edit it however you like; changes apply to the next message.
-
-**Reference docs** below it is the AI's library: the shop reference (mill,
-lathe, CNC, waterjet, CAM, CAD, assembly, wiring, FRC basics) lives here as
-`.txt`/`.md` files instead of being crammed into the prompt. The AI sees the
-list of filenames in every chat and opens a doc with its `read_doc` tool when
-a question needs the details — so docs only cost tokens when they're actually
-used. Drag files in to add to the library: game-manual notes, team procedures,
-anything. Uploading a file whose name is taken never overwrites — you choose
-Replace, Keep both, or Skip — and replaced or deleted docs are moved to
-`data/docs/.trash/` on the server (timestamped), never destroyed. You can also
-manage the files directly in `data/docs/` if you prefer.
-
-Below that, **Team knowledge** lists what the app has learned on its own.

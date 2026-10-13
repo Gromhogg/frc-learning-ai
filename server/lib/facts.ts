@@ -9,9 +9,9 @@ import {
 } from "./config.ts";
 
 // Every fact operation the review pipeline needs, shared between the
-// background learner (learn.ts) and the teacher's review routes (routes/facts.ts).
+// background learner (learn.ts) and the admin's review routes (routes/admin/facts.ts).
 //
-// Lifecycle: extracted facts land as "pending"; only teacher-approved facts
+// Lifecycle: extracted facts land as "pending"; only admin-approved facts
 // reach the system prompt; rejected facts stick around as a blocklist so the
 // same wrong fact is never proposed twice. Nothing here hard-deletes an
 // approved fact — "remove" is a flip to rejected.
@@ -57,7 +57,7 @@ export async function listFacts(): Promise<{ pending: FactRow[]; approved: FactR
   return {
     // Newest first — the queue reads like an inbox.
     pending: rows.filter((r) => r.status === "pending").sort((a, b) => b.id - a.id),
-    // Most-mentioned first — the order teachers already know.
+    // Most-mentioned first — the order admins already know.
     approved: rows.filter((r) => r.status === "approved").sort(byMentions),
   };
 }
@@ -74,7 +74,7 @@ export async function listFactsForExtraction() {
 /**
  * Queue a freshly extracted fact for review. Returns why it was skipped so
  * the learner can log it. Duplicate checks run against every status —
- * matching a rejected fact means a teacher already said no.
+ * matching a rejected fact means an admin already said no.
  */
 export async function insertPendingFact(input: {
   text: string;
@@ -113,7 +113,7 @@ export async function reinforceFact(id: number): Promise<void> {
 }
 
 /**
- * Approve a pending fact — optionally with the teacher's corrected wording —
+ * Approve a pending fact — optionally with the admin's corrected wording —
  * which puts it into every future system prompt. Refused at the cap: curated
  * facts are never silently dropped to make room.
  */
@@ -165,7 +165,7 @@ export async function editFact(id: number, text: string): Promise<void> {
 
 /**
  * Expire what nobody will ever look at: pending facts past the queue cap
- * (oldest first — the teacher plainly isn't reviewing them) and the oldest
+ * (oldest first — the admin plainly isn't reviewing them) and the oldest
  * entries of an overgrown blocklist. Approved facts are never touched.
  */
 export async function trimQueues(): Promise<void> {

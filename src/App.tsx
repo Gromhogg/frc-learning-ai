@@ -1,79 +1,115 @@
-import { createBrowserRouter, RouterProvider, Navigate, useNavigate, useRouteError, isRouteErrorResponse } from "react-router-dom";
-import type { ReactNode } from "react";
-import Chat from "./pages/Chat";
+import { lazy, Suspense, type ReactNode } from "react";
+import { createBrowserRouter, Navigate, RouterProvider, useRouteError } from "react-router-dom";
+import { Toaster } from "sonner";
+import { AuthProvider } from "./auth/AuthProvider";
+import { useAuth } from "./auth/auth-context";
+import { TooltipProvider } from "./components/ui/tooltip";
+import { Spinner } from "./components/ui/misc";
+import { Button } from "./components/ui/button";
 import Login from "./pages/Login";
-import Prompt from "./pages/Prompt";
 import AuthCallback from "./pages/AuthCallback";
-import { AuthProvider } from "./context/AuthContext";
-import { useAuth } from "./context/auth-context";
-import { buttonClass } from "./lib/button-styles";
+import ChatPage from "./pages/Chat";
+
+// Admin pages are a separate download — students never load them.
+const AdminLayout = lazy(() => import("./admin/AdminLayout"));
+const PromptPage = lazy(() => import("./admin/PromptPage"));
+const SuggestionsPage = lazy(() => import("./admin/SuggestionsPage"));
+const FactsPage = lazy(() => import("./admin/FactsPage"));
+const DocsPage = lazy(() => import("./admin/DocsPage"));
+const HistoryPage = lazy(() => import("./admin/HistoryPage"));
+
+function FullPageSpinner() {
+  return (
+    <div className="flex h-full items-center justify-center text-muted">
+      <Spinner />
+    </div>
+  );
+}
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <FullPageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
-function RequireTeacher({ children }: { children: ReactNode }) {
+// The real check is on the server; this just keeps students out of pages
+// that would only show "Admins only" errors.
+function RequireAdmin({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return null;
+  if (loading) return <FullPageSpinner />;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== "teacher") return <Navigate to="/" replace />;
-  return <>{children}</>;
+  if (user.role !== "admin") return <Navigate to="/" replace />;
+  return <Suspense fallback={<FullPageSpinner />}>{children}</Suspense>;
 }
 
-function RouteErrorBoundary() {
+function RouteError() {
   const error = useRouteError();
-  const navigate = useNavigate();
-
-  let title = "Something went wrong";
-  let message = "An unexpected error occurred.";
-
-  if (isRouteErrorResponse(error)) {
-    title = `${error.status} — ${error.statusText}`;
-    if (typeof error.data === "string") message = error.data;
-  } else if (error instanceof Error) {
-    message = error.message;
-  }
-
+  console.error(error);
   return (
-    <main className="flex flex-col flex-1 items-center justify-center min-h-screen bg-[var(--bg)] px-4">
-      <div className="w-full max-w-md rounded-2xl border-2 border-red-500/40 bg-red-500/10 px-6 py-6 text-center">
-        <h1 className="text-lg font-bold text-[var(--text-h)]">{title}</h1>
-        <p className="text-sm text-[var(--text)] mt-2 break-words">{message}</p>
-        <div className="flex gap-2 justify-center mt-5">
-          <button onClick={() => navigate("/")} className={buttonClass("primary", "sm")}>
-            Back to chat
-          </button>
-          <button onClick={() => window.location.reload()} className={buttonClass("outline", "sm")}>
-            Reload
-          </button>
-        </div>
-      </div>
-    </main>
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-4 text-center">
+      <p className="text-lg font-semibold">Something broke on this page.</p>
+      <p className="max-w-sm text-sm text-muted">Reloading usually fixes it. If it keeps happening, tell a mentor.</p>
+      <Button variant="primary" onClick={() => window.location.reload()}>
+        Reload
+      </Button>
+    </div>
   );
 }
 
 const router = createBrowserRouter([
-  { path: "/login", element: <Login />, errorElement: <RouteErrorBoundary /> },
-  { path: "/auth/callback", element: <AuthCallback />, errorElement: <RouteErrorBoundary /> },
-  {
-    path: "/prompt",
-    element: <RequireTeacher><Prompt /></RequireTeacher>,
-    errorElement: <RouteErrorBoundary />,
-  },
+  { path: "/login", element: <Login />, errorElement: <RouteError /> },
+  { path: "/auth/callback", element: <AuthCallback />, errorElement: <RouteError /> },
   {
     path: "/",
-    element: <RequireAuth><Chat /></RequireAuth>,
-    errorElement: <RouteErrorBoundary />,
+    element: (
+      <RequireAuth>
+        <ChatPage />
+      </RequireAuth>
+    ),
+    errorElement: <RouteError />,
   },
+  {
+    path: "/c/:id",
+    element: (
+      <RequireAuth>
+        <ChatPage />
+      </RequireAuth>
+    ),
+    errorElement: <RouteError />,
+  },
+  {
+    path: "/admin",
+    element: (
+      <RequireAdmin>
+        <AdminLayout />
+      </RequireAdmin>
+    ),
+    errorElement: <RouteError />,
+    children: [
+      { index: true, element: <Navigate to="prompt" replace /> },
+      { path: "prompt", element: <PromptPage /> },
+      { path: "suggestions", element: <SuggestionsPage /> },
+      { path: "facts", element: <FactsPage /> },
+      { path: "docs", element: <DocsPage /> },
+      { path: "history", element: <HistoryPage /> },
+    ],
+  },
+  { path: "*", element: <Navigate to="/" replace /> },
 ]);
 
 export default function App() {
   return (
     <AuthProvider>
-      <RouterProvider router={router} />
+      <TooltipProvider>
+        <RouterProvider router={router} />
+        <Toaster
+          position="bottom-center"
+          toastOptions={{
+            className: "!rounded-xl !border-line !bg-surface !text-fg !shadow-float !font-sans",
+          }}
+        />
+      </TooltipProvider>
     </AuthProvider>
   );
 }

@@ -1,6 +1,6 @@
 import "../server/lib/env.ts";
 import { eq } from "drizzle-orm";
-import { db } from "./index.ts";
+import { db, runMigrations } from "./index.ts";
 import { settings } from "./schema.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "../server/lib/default-prompt.ts";
 import { PROMPT_KEY } from "../server/lib/prompt.ts";
@@ -10,8 +10,9 @@ import { ensurePromptSectionsMigrated } from "../server/lib/prompt-sections-migr
 
 // Seeds what the app needs to start: the default AI instructions and the
 // starter reference docs. No users are created — the first person to sign up
-// with the teacher code becomes the teacher.
+// with the admin code becomes the admin.
 async function seed() {
+  runMigrations();
   const [existing] = await db.select().from(settings).where(eq(settings.key, PROMPT_KEY));
 
   if (existing) {

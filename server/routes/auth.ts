@@ -29,9 +29,12 @@ function getGoogle() {
   );
 }
 
-/** True only if a teacher code is configured AND the supplied one matches. */
-function isValidTeacherCode(code: string | undefined): boolean {
-  const expected = process.env.TEACHER_CODE;
+/**
+ * True only if an admin code is configured AND the supplied one matches.
+ * TEACHER_CODE is the pre-redesign name — still read so old .env files work.
+ */
+function isValidAdminCode(code: string | undefined): boolean {
+  const expected = process.env.ADMIN_CODE || process.env.TEACHER_CODE;
   if (!expected) return false;
   return typeof code === "string" && code.trim() === expected;
 }
@@ -78,8 +81,8 @@ app.get("/google/callback", async (c) => {
     let [user] = await db.select().from(users).where(eq(users.email, email));
 
     if (!user) {
-      // New Google users always start as students. To become a teacher they
-      // enter the teacher code from inside the app.
+      // New Google users always start as students. To become an admin they
+      // enter the admin code from inside the app.
       [user] = await db
         .insert(users)
         .values({ name, email, googleId, avatarUrl: picture, role: "student" })
@@ -151,11 +154,11 @@ app.post("/login", async (c) => {
 });
 
 app.post("/register", async (c) => {
-  const { name, email, password, teacherCode } = await c.req.json<{
+  const { name, email, password, adminCode } = await c.req.json<{
     name: string;
     email: string;
     password: string;
-    teacherCode?: string;
+    adminCode?: string;
   }>();
 
   const trimmedName = (name ?? "").trim();
@@ -171,11 +174,11 @@ app.post("/register", async (c) => {
     return c.json({ error: "Please enter a valid email address." }, 400);
   }
 
-  // A wrong teacher code is an error, not a quiet downgrade to student —
-  // otherwise a teacher with a typo silently gets the wrong account.
-  const wantsTeacher = typeof teacherCode === "string" && teacherCode.trim().length > 0;
-  if (wantsTeacher && !isValidTeacherCode(teacherCode)) {
-    return c.json({ error: "That teacher code isn't right." }, 400);
+  // A wrong admin code is an error, not a quiet downgrade to student —
+  // otherwise a mentor with a typo silently gets the wrong account.
+  const wantsAdmin = typeof adminCode === "string" && adminCode.trim().length > 0;
+  if (wantsAdmin && !isValidAdminCode(adminCode)) {
+    return c.json({ error: "That admin code isn't right." }, 400);
   }
 
   const [existing] = await db.select().from(users).where(eq(users.email, trimmedEmail));
@@ -191,7 +194,7 @@ app.post("/register", async (c) => {
         name: trimmedName,
         email: trimmedEmail,
         passwordHash: await bcrypt.hash(password, 10),
-        role: wantsTeacher ? "teacher" : "student",
+        role: wantsAdmin ? "admin" : "student",
       })
       .returning();
   } catch {
@@ -204,23 +207,23 @@ app.post("/register", async (c) => {
   return c.json({ token, user: safeUser, firstTime: false }, 201);
 });
 
-// ── Becoming a teacher ───────────────────────────────────────────────────────
+// ── Becoming an admin ────────────────────────────────────────────────────────
 
-// The teacher code is the ONLY way to become a teacher. This endpoint covers
+// The admin code is the ONLY way to become an admin. This endpoint covers
 // people who signed in with Google (no signup form to type a code into).
-app.post("/teacher-code", async (c) => {
+app.post("/admin-code", async (c) => {
   const auth = await getAuth(c);
   if (!auth) return c.json({ error: "Not signed in." }, 401);
 
   const { code } = await c.req.json<{ code: string }>();
-  if (!isValidTeacherCode(code)) {
-    return c.json({ error: "That teacher code isn't right." }, 400);
+  if (!isValidAdminCode(code)) {
+    return c.json({ error: "That admin code isn't right." }, 400);
   }
 
-  await db.update(users).set({ role: "teacher" }).where(eq(users.id, auth.userId));
+  await db.update(users).set({ role: "admin" }).where(eq(users.id, auth.userId));
 
   const [user] = await db.select(safeColumns).from(users).where(eq(users.id, auth.userId));
-  const token = await signToken({ userId: auth.userId, role: "teacher" });
+  const token = await signToken({ userId: auth.userId, role: "admin" });
   return c.json({ token, user });
 });
 

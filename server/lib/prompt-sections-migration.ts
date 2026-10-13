@@ -6,7 +6,7 @@ import { assembleDoc, SECTIONS_FORMAT, serializeDoc, splitLegacyPrompt } from ".
 
 // One-time split of the single-blob instructions into editable sections.
 // Runs at every server start but does its work exactly once, guarded by a
-// settings flag — flag-based on purpose, so a teacher who deliberately
+// settings flag — flag-based on purpose, so an admin who deliberately
 // restores an old one-blob version from history is never re-split behind
 // their back.
 //
