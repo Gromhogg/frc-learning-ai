@@ -3,7 +3,7 @@ import { Type } from "@mariozechner/pi-ai";
 import { listDocs, readDoc } from "../lib/docs.ts";
 import { buildSystemPrompt } from "../lib/prompt.ts";
 import { MAX_DOC_READS_PER_TURN } from "../lib/config.ts";
-import { tutorModel, withThinking } from "../ai/models.ts";
+import { modelFor, withThinking } from "../ai/models.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { DescribeStep } from "../ai/run-agent.ts";
 
@@ -49,7 +49,7 @@ export async function createTutor(history: AgentMessage[]): Promise<Agent> {
   return new Agent({
     initialState: {
       systemPrompt: await buildSystemPrompt(),
-      model: tutorModel,
+      model: modelFor("tutor"),
       thinkingLevel: "off",
       tools: [readDocTool],
       messages: history,

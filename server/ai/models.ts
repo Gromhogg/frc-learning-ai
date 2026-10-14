@@ -1,4 +1,7 @@
 import type { Model } from "@mariozechner/pi-ai";
+import { eq } from "drizzle-orm";
+import { db } from "../../db/index.ts";
+import { settings } from "../../db/schema.ts";
 import { EDITOR_MODEL, LEARN_MODEL, TUTOR_MODEL } from "../lib/config.ts";
 
 // Pi ships a built-in model list, but it doesn't know the Claude 5.5 family
@@ -33,9 +36,56 @@ function claude(id: string): Model<"anthropic-messages"> {
   };
 }
 
-export const tutorModel = claude(TUTOR_MODEL);
-export const editorModel = claude(EDITOR_MODEL);
-export const learnModel = claude(LEARN_MODEL);
+// ─── which model each agent uses ───────────────────────────────────────────
+//
+// Admins pick these on the Settings page; the choice lives in the `settings`
+// table as model.tutor / model.editor / model.learn. config.ts holds the
+// defaults. Read on every request, so a change applies to the next message.
+
+export type AgentRole = "tutor" | "editor" | "learn";
+
+/** The models admins can choose from, cheapest first. */
+export const MODEL_CHOICES = [
+  { id: "claude-haiku-5-5", label: "Claude Haiku 5.5", price: "$0.10 / $0.50 per million tokens", tier: "Fastest, cheapest" },
+  { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5", price: "$2 / $10 per million tokens", tier: "Balanced" },
+  { id: "claude-opus-5-5", label: "Claude Opus 5.5", price: "$4 / $20 per million tokens", tier: "Smartest" },
+] as const;
+
+const DEFAULTS: Record<AgentRole, string> = {
+  tutor: TUTOR_MODEL,
+  editor: EDITOR_MODEL,
+  learn: LEARN_MODEL,
+};
+
+const cache = new Map<AgentRole, string>();
+
+export function settingKey(role: AgentRole): string {
+  return `model.${role}`;
+}
+
+export function isAllowedModel(id: string): boolean {
+  return MODEL_CHOICES.some((m) => m.id === id);
+}
+
+/** The model id an agent should use right now. */
+export function modelIdFor(role: AgentRole): string {
+  const cached = cache.get(role);
+  if (cached) return cached;
+  const row = db.select().from(settings).where(eq(settings.key, settingKey(role))).get();
+  const id = row && isAllowedModel(row.value) ? row.value : DEFAULTS[role];
+  cache.set(role, id);
+  return id;
+}
+
+/** The Pi model object an agent should use right now. */
+export function modelFor(role: AgentRole): Model<"anthropic-messages"> {
+  return claude(modelIdFor(role));
+}
+
+/** Forget cached choices — call after the settings change. */
+export function clearModelCache(): void {
+  cache.clear();
+}
 
 /**
  * A Pi `onPayload` hook that turns on adaptive thinking with readable

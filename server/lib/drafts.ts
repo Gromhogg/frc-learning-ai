@@ -1,6 +1,7 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { promptDrafts, users } from "../../db/schema.ts";
+import { logEvent } from "./events.ts";
 import { currentVersion, getVersion, saveSections, sectionsOf, type PromptVersion } from "./prompt.ts";
 import { parseDoc, serializeDoc, SECTIONS_FORMAT, type PromptSection } from "./prompt-sections.ts";
 
@@ -30,6 +31,7 @@ export interface Draft {
   stale: boolean;
 }
 
+/** Record a new draft. Every create, apply, and dismiss goes in the activity log. */
 export async function createDraft(input: {
   source: "admin_chat" | "review";
   baseVersion: number;
@@ -52,7 +54,14 @@ export async function createDraft(input: {
       createdBy: input.createdBy ?? null,
       agentChatId: input.agentChatId ?? null,
     })
-    .returning({ id: promptDrafts.id });
+    .returning({ id: promptDrafts.id, title: promptDrafts.title });
+
+  await logEvent({
+    actorId: input.createdBy ?? null,
+    action: "draft.create",
+    target: `draft #${row.id}`,
+    summary: `${input.source === "review" ? "Reviewer suggested" : "Prompt assistant drafted"}: ${row.title}`,
+  });
   return row.id;
 }
 
@@ -134,6 +143,13 @@ export async function applyDraft(
       appliedVersion: result.version.version,
     })
     .where(and(eq(promptDrafts.id, id), eq(promptDrafts.status, "pending")));
+
+  await logEvent({
+    actorId: adminId,
+    action: "draft.apply",
+    target: `draft #${id}`,
+    summary: `Applied "${row.title}" — saved as v${result.version.version}`,
+  });
   return { ok: true, version: result.version };
 }
 
@@ -142,8 +158,16 @@ export async function dismissDraft(id: number, adminId: number): Promise<boolean
     .update(promptDrafts)
     .set({ status: "dismissed", reviewedBy: adminId, reviewedAt: new Date().toISOString() })
     .where(and(eq(promptDrafts.id, id), eq(promptDrafts.status, "pending")))
-    .returning({ id: promptDrafts.id });
-  return updated.length > 0;
+    .returning({ id: promptDrafts.id, title: promptDrafts.title });
+  if (updated.length === 0) return false;
+
+  await logEvent({
+    actorId: adminId,
+    action: "draft.dismiss",
+    target: `draft #${id}`,
+    summary: `Dismissed "${updated[0].title}"`,
+  });
+  return true;
 }
 
 function toDraft(

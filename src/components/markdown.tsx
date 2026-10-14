@@ -23,7 +23,7 @@ function CodeBlock({ children, language }: { children: string; language?: string
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
-      <pre className="overflow-x-auto p-3.5 text-[13px] leading-relaxed">
+      <pre className="overflow-x-auto p-3.5 text-[0.88em] leading-relaxed">
         <code className="font-mono">{children}</code>
       </pre>
     </div>

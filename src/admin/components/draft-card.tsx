@@ -73,7 +73,7 @@ export function DraftCard({
         <span
           className={cn(
             "mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-xl",
-            pending ? "bg-accent-soft text-accent" : "bg-surface-2 text-muted",
+            pending ? "bg-accent-soft text-accent-text" : "bg-surface-2 text-muted",
           )}
         >
           {draft.source === "review" ? <Sparkles className="size-4" /> : <Bot className="size-4" />}

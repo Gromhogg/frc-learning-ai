@@ -1,11 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { ArrowUp, ImagePlus, Square, X } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUp, ImagePlus, Mic, Square, X } from "lucide-react";
 import { api, API_BASE, errorMessage } from "../../lib/api";
 import { resizeImage } from "../../lib/resize-image";
+import { useVoiceInput } from "../../hooks/use-voice-input";
 import { cn } from "../../lib/cn";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/misc";
 import { Tooltip } from "../ui/tooltip";
+import { VoiceMeter } from "./voice-meter";
 
 const MAX_PHOTOS = 4;
 
@@ -15,6 +17,7 @@ export function Composer({
   onStop,
   placeholder = "Ask anything…",
   allowPhotos = false,
+  allowVoice = true,
   autoFocus,
   className,
 }: {
@@ -23,6 +26,8 @@ export function Composer({
   onStop?: () => void;
   placeholder?: string;
   allowPhotos?: boolean;
+  /** Show the "talk to type" mic button (only in browsers that support it). */
+  allowVoice?: boolean;
   autoFocus?: boolean;
   className?: string;
 }) {
@@ -32,6 +37,21 @@ export function Composer({
   const [error, setError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const voice = useVoiceInput(setText);
+  const { stop: stopVoice } = voice;
+  const [sendingVoice, setSendingVoice] = useState(false);
+  const busyRef = useRef(busy);
+
+  // "starting" = waiting for the browser to allow the mic.
+  const listening = voice.status === "listening" || voice.status === "starting";
+  const finishing = voice.status === "finishing";
+  const showMic = allowVoice && voice.supported && !busy;
+
+  // If the AI starts answering some other way, stop listening (nothing is sent).
+  useEffect(() => {
+    busyRef.current = busy;
+    if (busy) void stopVoice();
+  }, [busy, stopVoice]);
 
   // Grow with the text, up to a limit, then scroll.
   useLayoutEffect(() => {
@@ -61,17 +81,31 @@ export function Composer({
     }
   }
 
-  function submit() {
-    const trimmed = text.trim();
-    if (busy || uploading || (!trimmed && images.length === 0)) return;
+  async function submit() {
+    if (busy || uploading || finishing || sendingVoice) return;
+    if (listening) {
+      // Stop listening first, then send one message with the final words.
+      setSendingVoice(true);
+      const finalText = await stopVoice();
+      setSendingVoice(false);
+      send(finalText ?? text);
+      return;
+    }
+    send(text);
+  }
+
+  function send(value: string) {
+    const trimmed = value.trim();
+    if (busyRef.current || (!trimmed && images.length === 0)) return;
     onSend(trimmed, images);
     setText("");
     setImages([]);
     setError(null);
+    voice.clearMessage();
     textRef.current?.focus();
   }
 
-  const canSend = !uploading && (text.trim().length > 0 || images.length > 0);
+  const canSend = !uploading && (listening || text.trim().length > 0 || images.length > 0);
 
   return (
     <div className={className}>
@@ -115,12 +149,17 @@ export function Composer({
           value={text}
           autoFocus={autoFocus}
           rows={1}
-          placeholder={placeholder}
-          onChange={(e) => setText(e.target.value)}
+          readOnly={finishing}
+          placeholder={listening ? "Start talking…" : placeholder}
+          onChange={(e) => {
+            setText(e.target.value);
+            // Typing while listening: keep what they typed, and add new words after it.
+            if (listening) voice.edit(e.target.value);
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault();
-              submit();
+              void submit();
             }
           }}
           onPaste={(e) => {
@@ -131,7 +170,7 @@ export function Composer({
               void addPhotos(files);
             }
           }}
-          className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[15px] leading-relaxed text-fg placeholder:text-faint focus:outline-none"
+          className="block w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[17px] leading-relaxed text-fg placeholder:text-faint focus:outline-none"
         />
 
         <div className="flex items-center gap-1 px-2.5 pb-2.5">
@@ -163,6 +202,22 @@ export function Composer({
               </Tooltip>
             </>
           ) : null}
+          {showMic ? (
+            <Tooltip label={listening ? "Stop listening" : "Talk to type"}>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label={listening ? "Stop listening" : "Talk to type"}
+                aria-pressed={listening}
+                className={cn("rounded-full", listening ? "!bg-accent-soft !text-accent-text" : "text-muted")}
+                disabled={finishing || sendingVoice}
+                onClick={() => (listening ? void stopVoice() : voice.start(text))}
+              >
+                {voice.status === "starting" || finishing ? <Spinner /> : <Mic />}
+              </Button>
+            </Tooltip>
+          ) : null}
+          {voice.status === "listening" ? <VoiceMeter analyser={voice.analyser} startedAt={voice.startedAt} /> : null}
           <div className="flex-1" />
           {busy && onStop ? (
             <Tooltip label="Stop">
@@ -176,15 +231,24 @@ export function Composer({
               size="icon"
               aria-label="Send"
               className="rounded-full"
-              disabled={!canSend || busy}
-              onClick={submit}
+              disabled={!canSend || busy || finishing}
+              onClick={() => void submit()}
             >
-              <ArrowUp />
+              {sendingVoice ? <Spinner /> : <ArrowUp />}
             </Button>
           )}
         </div>
       </div>
       {error ? <p className="mt-2 px-2 text-sm text-bad">{error}</p> : null}
+      {voice.message ? (
+        <p className={cn("mt-2 px-2 text-sm", voice.message.tone === "error" ? "text-bad" : "text-muted")}>
+          {voice.message.text}
+        </p>
+      ) : null}
+      {/* Tells screen readers when listening starts, and why it stopped. */}
+      <span className="sr-only" aria-live="polite">
+        {voice.status === "listening" ? "Listening" : (voice.message?.text ?? "")}
+      </span>
     </div>
   );
 }

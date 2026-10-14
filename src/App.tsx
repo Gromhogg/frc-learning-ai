@@ -17,6 +17,8 @@ const SuggestionsPage = lazy(() => import("./admin/SuggestionsPage"));
 const FactsPage = lazy(() => import("./admin/FactsPage"));
 const DocsPage = lazy(() => import("./admin/DocsPage"));
 const HistoryPage = lazy(() => import("./admin/HistoryPage"));
+const AdminsPage = lazy(() => import("./admin/AdminsPage"));
+const SettingsPage = lazy(() => import("./admin/SettingsPage"));
 
 function FullPageSpinner() {
   return (
@@ -93,6 +95,8 @@ const router = createBrowserRouter([
       { path: "facts", element: <FactsPage /> },
       { path: "docs", element: <DocsPage /> },
       { path: "history", element: <HistoryPage /> },
+      { path: "admins", element: <AdminsPage /> },
+      { path: "settings", element: <SettingsPage /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

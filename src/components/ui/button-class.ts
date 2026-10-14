@@ -4,7 +4,9 @@ export type Variant = "primary" | "secondary" | "ghost" | "danger" | "outline";
 export type Size = "sm" | "md" | "lg" | "icon" | "icon-sm";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-accent text-accent-fg hover:bg-accent-hover shadow-soft",
+  // Solid gray when disabled, rather than a faded see-through orange.
+  primary:
+    "bg-accent text-accent-fg hover:bg-accent-hover shadow-soft disabled:bg-surface-3 disabled:text-faint disabled:opacity-100 disabled:shadow-none",
   secondary: "bg-surface-2 text-fg hover:bg-surface-3",
   outline: "border border-line bg-surface text-fg hover:bg-surface-2",
   ghost: "text-fg-2 hover:bg-surface-2 hover:text-fg",

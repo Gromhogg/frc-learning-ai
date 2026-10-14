@@ -13,7 +13,7 @@ export function Badge({
 }) {
   const tones = {
     neutral: "bg-surface-2 text-fg-2 border-line",
-    accent: "bg-accent-soft text-accent border-accent-line",
+    accent: "bg-accent-soft text-accent-text border-accent-line",
     good: "bg-good-soft text-good border-transparent",
     warn: "bg-warn-soft text-warn border-transparent",
     bad: "bg-bad-soft text-bad border-transparent",
@@ -102,7 +102,7 @@ export function Avatar({ name, src, size = 28 }: { name: string; src?: string | 
   }
   return (
     <span
-      className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent-soft font-semibold text-accent"
+      className="inline-flex shrink-0 items-center justify-center rounded-full bg-accent font-semibold text-accent-fg"
       style={{ width: size, height: size, fontSize: size * 0.42 }}
     >
       {initial}

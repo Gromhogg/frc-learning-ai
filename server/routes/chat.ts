@@ -8,7 +8,7 @@ import { readImageForModel, MAX_IMAGES_PER_MESSAGE } from "../lib/uploads.ts";
 import { noteExchange } from "../lib/learn.ts";
 import { createTutor, describeTutorStep } from "../agents/tutor.ts";
 import { historyToMessages, runAgentTurn, type ClientEvent } from "../ai/run-agent.ts";
-import { tutorModel } from "../ai/models.ts";
+import { modelFor } from "../ai/models.ts";
 import type { ImageContent } from "@mariozechner/pi-ai";
 
 const app = new Hono();
@@ -108,7 +108,7 @@ app.post("/", async (c) => {
     images: m.role === "user" ? imagesFor(JSON.parse(m.images) as string[]) : undefined,
   }));
 
-  const agent = await createTutor(historyToMessages(prior, tutorModel));
+  const agent = await createTutor(historyToMessages(prior, modelFor("tutor")));
 
   return streamSSE(c, async (stream) => {
     stream.onAbort(() => agent.abort());

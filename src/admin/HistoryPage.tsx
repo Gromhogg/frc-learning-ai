@@ -1,18 +1,84 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
+import { Activity, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { adminApi, type LivePrompt, type VersionMeta } from "./admin-api";
+import { adminApi, type AdminEvent, type LivePrompt, type VersionMeta } from "./admin-api";
 import { diffSections } from "./section-diff";
 import { errorMessage } from "../lib/api";
 import { timeAgo } from "../lib/time";
 import { cn } from "../lib/cn";
 import { Button } from "../components/ui/button";
-import { Badge, Skeleton } from "../components/ui/misc";
+import { Badge, EmptyState, Skeleton } from "../components/ui/misc";
 import { ConfirmDialog } from "../components/ui/dialog";
 import { PageHeader } from "./components/page-header";
 import { SectionChanges } from "./components/diff-view";
 
+/** Plain names for the actions in the activity log. */
+const ACTION_LABELS: Record<string, string> = {
+  "prompt.save": "Saved prompt",
+  "prompt.rollback": "Restored version",
+  "draft.create": "New suggestion",
+  "draft.apply": "Applied suggestion",
+  "draft.dismiss": "Dismissed suggestion",
+  "fact.approve": "Approved fact",
+  "fact.reject": "Rejected fact",
+  "fact.remove": "Removed fact",
+  "fact.edit": "Edited fact",
+  "fact.restore": "Restored fact",
+  "doc.upload": "Added doc",
+  "doc.delete": "Deleted doc",
+  "doc.restore": "Restored doc",
+  "settings.model": "Changed model",
+  "admin.grant": "Added admin",
+};
+
+/** Things that took something away get a warning color; everything else is plain. */
+function actionTone(action: string): "warn" | "neutral" {
+  return /\.(reject|remove|delete|dismiss)$/.test(action) ? "warn" : "neutral";
+}
+
+function ActivityList() {
+  const [events, setEvents] = useState<AdminEvent[] | null>(null);
+
+  useEffect(() => {
+    adminApi
+      .events()
+      .then(({ events }) => setEvents(events))
+      .catch((err) => toast.error(errorMessage(err)));
+  }, []);
+
+  if (events === null) return <Skeleton className="h-80 rounded-2xl" />;
+  if (events.length === 0) {
+    return (
+      <EmptyState icon={<Activity />} title="No activity yet">
+        Changes to the prompt, suggestions, facts, docs, and settings show up here.
+      </EmptyState>
+    );
+  }
+  return (
+    <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
+      {events.map((e) => (
+        <li key={e.id} className="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-start sm:gap-3">
+          <Badge tone={actionTone(e.action)} className="self-start sm:mt-0.5">
+            {ACTION_LABELS[e.action] ?? e.action}
+          </Badge>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm break-words">{e.summary}</p>
+            <p className="mt-0.5 text-xs text-muted">
+              {e.actorName}
+              {e.target ? ` · ${e.target}` : ""}
+            </p>
+          </div>
+          <span className="shrink-0 text-xs text-faint">{timeAgo(e.createdAt)}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export default function HistoryPage() {
+  const [params, setParams] = useSearchParams();
+  const tab = params.get("tab") === "activity" ? "activity" : "versions";
   const [versions, setVersions] = useState<VersionMeta[] | null>(null);
   const [selected, setSelected] = useState<number | null>(null);
   const [pair, setPair] = useState<{ v: LivePrompt; prev: LivePrompt | null } | null>(null);
@@ -63,10 +129,38 @@ export default function HistoryPage() {
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
-        title="History"
-        description="Every saved version of the prompt. Restoring an old one saves it again as the newest version — nothing is ever erased."
+        title="Versions"
+        description={
+          tab === "versions"
+            ? "Every saved version of the prompt. Restoring an old one saves it again as the newest version — nothing is ever erased."
+            : "Who changed what, newest first: the prompt, suggestions, team facts, docs, and settings."
+        }
       />
-      {versions === null ? (
+
+      <div className="mb-4 inline-flex rounded-xl bg-surface-2 p-1">
+        {(
+          [
+            ["versions", "Prompt versions"],
+            ["activity", "Activity"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setParams(value === "versions" ? {} : { tab: value }, { replace: true })}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              tab === value ? "bg-surface text-fg shadow-soft" : "text-muted hover:text-fg",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "activity" ? (
+        <ActivityList />
+      ) : versions === null ? (
         <Skeleton className="h-80 rounded-2xl" />
       ) : (
         <div className="grid gap-4 md:grid-cols-[260px_1fr]">

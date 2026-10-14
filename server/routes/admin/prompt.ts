@@ -13,6 +13,7 @@ import {
   type PromptVersion,
 } from "../../lib/prompt.ts";
 import { validateSections } from "../../lib/prompt-sections.ts";
+import { logEvent } from "../../lib/events.ts";
 
 const app = new Hono<AdminEnv>();
 
@@ -93,6 +94,12 @@ app.put("/", async (c) => {
     );
   }
 
+  await logEvent({
+    actorId: c.get("adminId"),
+    action: "prompt.save",
+    target: `v${result.version.version}`,
+    summary: result.version.note || `Saved v${result.version.version}`,
+  });
   return c.json({ ok: true, ...live(result.version) });
 });
 
@@ -135,6 +142,12 @@ app.post("/rollback", async (c) => {
     );
   }
 
+  await logEvent({
+    actorId: c.get("adminId"),
+    action: "prompt.rollback",
+    target: `v${result.version.version}`,
+    summary: result.version.note || `Saved v${result.version.version}`,
+  });
   return c.json({ ok: true, ...live(result.version) });
 });
 

@@ -52,7 +52,7 @@ export function Sidebar({
       <div className="flex items-center gap-2 px-3 pt-3 pb-2">
         <Link to="/" onClick={onNavigate} className="flex min-w-0 flex-1 items-center gap-2.5 rounded-lg px-1 py-1">
           <Logo size={26} />
-          <span className="truncate text-[15px] font-semibold tracking-tight">Robotics Mentor</span>
+          <span className="truncate text-[15px] font-semibold tracking-tight">972 Chat Bot</span>
         </Link>
         <Tooltip label="Close sidebar" side="bottom">
           <Button variant="ghost" size="icon-sm" aria-label="Close sidebar" onClick={onCollapse}>

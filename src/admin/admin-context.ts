@@ -9,6 +9,8 @@ export interface AdminOutletContext {
   counts: AdminCounts;
   /** Re-fetch the badge counts in the side menu after a change. */
   refreshCounts: () => void;
+  /** Goes up by one each time the prompt assistant applies a change. */
+  appliedCount: number;
 }
 
 export function useAdmin() {

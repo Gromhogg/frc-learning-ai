@@ -65,7 +65,7 @@ export const MAX_REJECTED_KEPT = 200;
 // admin to approve. It runs once a day on its own (if there are new chats)
 // and whenever an admin clicks "Review recent chats".
 export const REVIEW_INTERVAL_HOURS = 24;
-export const REVIEW_MAX_CHATS = 12; // chats read per review
+export const REVIEW_MAX_CHATS = 20; // chats read per review
 export const REVIEW_DAILY_RUN_CAP = 6; // on-demand runs per day, across all admins
 // Pending drafts pile up if nobody reviews them; past this the reviewer waits.
 export const MAX_PENDING_DRAFTS = 10;

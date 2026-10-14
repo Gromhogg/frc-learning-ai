@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { PanelLeftOpen, Settings2, SquarePen } from "lucide-react";
+import { PanelLeftOpen, SquarePen } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "../auth/auth-context";
 import { api, errorMessage } from "../lib/api";
@@ -11,9 +11,11 @@ import { Sidebar, type ConversationSummary } from "../components/chat/sidebar";
 import { MessageList } from "../components/chat/message-list";
 import { AssistantMessage, UserMessage } from "../components/chat/message";
 import { Composer } from "../components/chat/composer";
+import { StarterSuggestions } from "../components/chat/starter-suggestions";
+import { AdminButton } from "../components/admin-button";
+import { BackgroundShapes } from "../components/background-shapes";
 import { Button } from "../components/ui/button";
-import { buttonClass } from "../components/ui/button-class";
-import { Logo, Skeleton } from "../components/ui/misc";
+import { Skeleton } from "../components/ui/misc";
 import { Tooltip } from "../components/ui/tooltip";
 
 interface SavedMessage {
@@ -24,13 +26,6 @@ interface SavedMessage {
   steps: Step[];
   rating: "up" | "down" | null;
 }
-
-const STARTERS = [
-  "How do I safely set up the vertical mill?",
-  "Explain how a swerve drive works",
-  "What's the difference between a NEO and a Falcon?",
-  "Help me debug my command-based robot code",
-];
 
 const SIDEBAR_KEY = "sidebar_open";
 
@@ -240,7 +235,9 @@ export default function ChatPage() {
         ) : null}
       </AnimatePresence>
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      {/* `relative isolate` keeps the background shapes behind everything in here. */}
+      <main className="relative isolate flex min-w-0 flex-1 flex-col">
+        <BackgroundShapes />
         <header className="flex h-14 shrink-0 items-center gap-1 px-3">
           {!desktop || !sidebarOpen ? (
             <>
@@ -257,12 +254,7 @@ export default function ChatPage() {
             </>
           ) : null}
           <h1 className="ml-1 min-w-0 flex-1 truncate text-sm font-medium text-fg-2">{title ?? ""}</h1>
-          {user?.role === "admin" ? (
-            <Link to="/admin" className={buttonClass("outline", "sm")}>
-              <Settings2 />
-              Admin
-            </Link>
-          ) : null}
+          <AdminButton />
         </header>
 
         {empty ? (
@@ -274,25 +266,12 @@ export default function ChatPage() {
               className="w-full max-w-2xl"
             >
               <div className="mb-8 flex flex-col items-center text-center">
-                <Logo size={40} />
-                <h2 className="mt-5 text-[28px] font-semibold tracking-tight">
+                <h2 className="text-[28px] font-semibold tracking-tight">
                   What are we building{firstName ? `, ${firstName}` : ""}?
                 </h2>
-                <p className="mt-2 text-muted">Ask about the shop, the robot, code, CAD — or send a photo.</p>
               </div>
               <Composer busy={chat.busy} onSend={send} onStop={chat.stop} allowPhotos autoFocus />
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                {STARTERS.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => void send(s, [])}
-                    className="rounded-2xl border border-line bg-surface px-4 py-3 text-left text-sm text-fg-2 transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-fg"
-                  >
-                    {s}
-                  </button>
-                ))}
-              </div>
+              <StarterSuggestions onPick={(s) => void send(s, [])} />
             </motion.div>
           </div>
         ) : (

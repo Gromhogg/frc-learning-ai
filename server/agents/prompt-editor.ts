@@ -1,5 +1,5 @@
 import { Agent, type AgentMessage } from "@mariozechner/pi-agent-core";
-import { editorModel, withThinking } from "../ai/models.ts";
+import { modelFor, withThinking } from "../ai/models.ts";
 import { EDITOR_MAX_TOOL_CALLS } from "../lib/config.ts";
 import { proposeChangeTool, sharedReadTools } from "./prompt-tools.ts";
 
@@ -28,7 +28,7 @@ export function createPromptEditor(input: {
   return new Agent({
     initialState: {
       systemPrompt: EDITOR_PROMPT,
-      model: editorModel,
+      model: modelFor("editor"),
       thinkingLevel: "off",
       tools: [
         ...sharedReadTools,

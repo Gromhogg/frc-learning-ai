@@ -11,6 +11,10 @@ export const users = sqliteTable("users", {
   avatarUrl: text("avatar_url"),
   passwordHash: text("password_hash"),
   role: text("role", { enum: ["student", "admin"] }).default("student").notNull(),
+  // Set when the person proved they own the email (signup code or Google).
+  emailVerifiedAt: text("email_verified_at"),
+  // When they became an admin. Admin access is never removed in the app.
+  adminSince: text("admin_since"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
@@ -59,6 +63,9 @@ export const teamFacts = sqliteTable("team_facts", {
     .notNull()
     .default("pending"),
   mentionCount: integer("mention_count").notNull().default(1),
+  // Bumped on every edit, so two admins editing the same fact can't silently
+  // overwrite each other (a stale edit gets a 409).
+  version: integer("version").notNull().default(1),
   // Which student's conversation surfaced this fact — audit trail for the
   // review queue. Null on facts that predate the review pipeline.
   sourceUserId: integer("source_user_id").references(() => users.id),
@@ -150,3 +157,48 @@ export const messageFeedback = sqliteTable(
   },
   (t) => [uniqueIndex("message_feedback_message_user").on(t.messageId, t.userId)],
 );
+
+// A signup waiting for its 6-digit email code. The password is already
+// hashed; the account is only created once the code checks out.
+export const emailCodes = sqliteTable("email_codes", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  email: text("email").notNull().unique(),
+  codeHash: text("code_hash").notNull(),
+  name: text("name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  expiresAt: text("expires_at").notNull(),
+  attempts: integer("attempts").notNull().default(0),
+  sentCount: integer("sent_count").notNull().default(1),
+  lastSentAt: text("last_sent_at").notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// What the AI has learned about one person's interests, from their own
+// chats, plus their cached starter suggestions. Only used for that person.
+export const userProfiles = sqliteTable("user_profiles", {
+  userId: integer("user_id").primaryKey().references(() => users.id),
+  // JSON: [{ topic, score, chats, lastSeen }]
+  interests: text("interests").notNull().default("[]"),
+  // Set only when the person firmly says what they focus on ("I only do wiring").
+  statedFocus: text("stated_focus"),
+  // JSON: string[] — the starter chips on their empty chat screen.
+  suggestions: text("suggestions").notNull().default("[]"),
+  suggestionsGeneratedAt: text("suggestions_generated_at"),
+  // True when interests changed since the suggestions were made.
+  suggestionsDirty: integer("suggestions_dirty", { mode: "boolean" }).notNull().default(true),
+  updatedAt: text("updated_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// Activity log for admin work: who did what, when. Append-only.
+export const adminEvents = sqliteTable("admin_events", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  actorId: integer("actor_id").references(() => users.id),
+  // Copied in so the log still reads right if an account is deleted.
+  actorName: text("actor_name").notNull(),
+  // e.g. "prompt.save", "draft.apply", "fact.approve", "doc.delete", "settings.model", "admin.grant"
+  action: text("action").notNull(),
+  // What it was done to, e.g. "v8", "fact #12", "vertical-mill.md"
+  target: text("target"),
+  summary: text("summary").notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});

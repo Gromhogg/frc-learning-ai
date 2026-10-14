@@ -1,15 +1,11 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Settings2, Sun } from "lucide-react";
-import { toast } from "sonner";
-import { useAuth, type AuthUser } from "../auth/auth-context";
-import { api, errorMessage } from "../lib/api";
+import { ChevronsUpDown, LogOut, Monitor, Moon, Settings2, Sparkles, Sun } from "lucide-react";
+import { useAuth } from "../auth/auth-context";
 import { useTheme, type ThemeChoice } from "../lib/theme";
 import { Avatar } from "./ui/misc";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/menu";
-import { Dialog } from "./ui/dialog";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { InterestsDialog } from "./interests-dialog";
 
 const THEMES: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -22,7 +18,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
   const { user, logout } = useAuth();
   const { choice, setChoice } = useTheme();
   const navigate = useNavigate();
-  const [codeOpen, setCodeOpen] = useState(false);
+  const [interestsOpen, setInterestsOpen] = useState(false);
   if (!user) return null;
 
   return (
@@ -70,11 +66,10 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
             <MenuItem icon={<Settings2 />} onSelect={() => navigate("/admin")}>
               Admin
             </MenuItem>
-          ) : (
-            <MenuItem icon={<KeyRound />} onSelect={() => setCodeOpen(true)}>
-              I'm a mentor (admin code)
-            </MenuItem>
-          )}
+          ) : null}
+          <MenuItem icon={<Sparkles />} onSelect={() => setInterestsOpen(true)}>
+            Your interests
+          </MenuItem>
           <MenuItem
             icon={<LogOut />}
             onSelect={() => {
@@ -86,67 +81,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           </MenuItem>
         </MenuContent>
       </Menu>
-      <AdminCodeDialog open={codeOpen} onOpenChange={setCodeOpen} />
+      <InterestsDialog open={interestsOpen} onOpenChange={setInterestsOpen} />
     </>
-  );
-}
-
-function AdminCodeDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const { setSession } = useAuth();
-  const navigate = useNavigate();
-  const [code, setCode] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!code.trim() || busy) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await api<{ token: string; user: AuthUser }>("/auth/admin-code", {
-        method: "POST",
-        body: JSON.stringify({ code }),
-      });
-      setSession(result.token, result.user);
-      onOpenChange(false);
-      toast.success("You're an admin now.");
-      navigate("/admin");
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        onOpenChange(next);
-        if (!next) {
-          setCode("");
-          setError(null);
-        }
-      }}
-      title="Enter the admin code"
-      description="Mentors use this to edit the AI's instructions, review what it learns, and manage reference docs."
-      size="sm"
-    >
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <Input
-          autoFocus
-          type="password"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          placeholder="Admin code"
-          aria-label="Admin code"
-        />
-        {error ? <p className="text-sm text-bad">{error}</p> : null}
-        <Button type="submit" variant="primary" disabled={busy || !code.trim()}>
-          {busy ? "Checking…" : "Become admin"}
-        </Button>
-      </form>
-    </Dialog>
   );
 }

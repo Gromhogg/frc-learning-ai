@@ -26,7 +26,7 @@ export function UserMessage({ message }: { message: ChatMessage }) {
         </div>
       ) : null}
       {message.text ? (
-        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-surface-2 px-4 py-2.5 text-[15px] leading-relaxed whitespace-pre-wrap">
+        <div className="max-w-[85%] rounded-3xl rounded-br-lg bg-surface-2 px-4 py-2.5 text-[17px] leading-relaxed whitespace-pre-wrap">
           {message.text}
         </div>
       ) : null}
@@ -71,11 +71,11 @@ export function AssistantMessage({
         ) : null}
 
         {message.thinking && !message.text ? (
-          <p className="text-shimmer py-1 text-[15px]">Thinking…</p>
+          <p className="text-shimmer py-1 text-[17px]">Thinking…</p>
         ) : null}
 
         {message.text ? (
-          <Markdown text={message.text} className={cn("text-[15px]", streaming && "caret")} />
+          <Markdown text={message.text} className={cn("text-[17px]", streaming && "caret")} />
         ) : null}
 
         {extras}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Inbox, Sparkles } from "lucide-react";
 import { toast } from "sonner";
-import { adminApi, type Draft, type ReviewOutcome } from "./admin-api";
+import { adminApi, type Draft, type ReviewProgress, type ReviewStatus } from "./admin-api";
 import { useAdmin } from "./admin-context";
 import { errorMessage } from "../lib/api";
 import { timeAgo } from "../lib/time";
@@ -13,10 +13,10 @@ import { PageHeader } from "./components/page-header";
 import { DraftCard } from "./components/draft-card";
 
 export default function SuggestionsPage() {
-  const { refreshCounts } = useAdmin();
+  const { refreshCounts, appliedCount } = useAdmin();
   const [tab, setTab] = useState<"pending" | "past">("pending");
   const [drafts, setDrafts] = useState<Draft[] | null>(null);
-  const [review, setReview] = useState<{ running: boolean; last: ReviewOutcome | null } | null>(null);
+  const [review, setReview] = useState<ReviewStatus | null>(null);
   const [running, setRunning] = useState(false);
 
   const load = useCallback(async () => {
@@ -29,9 +29,23 @@ export default function SuggestionsPage() {
     }
   }, []);
 
+  // Also reload when the prompt assistant applies one of these suggestions.
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, appliedCount]);
+
+  // While a review runs (this admin's or anyone's), check its progress.
+  const busy = running || !!review?.running;
+  useEffect(() => {
+    if (!busy) return;
+    const timer = setInterval(() => {
+      adminApi
+        .review()
+        .then(setReview)
+        .catch(() => {});
+    }, 1_500);
+    return () => clearInterval(timer);
+  }, [busy]);
 
   async function runReview() {
     setRunning(true);
@@ -61,12 +75,14 @@ export default function SuggestionsPage() {
         title="Suggestions"
         description="The AI reviews recent student chats once a day (👎 answers first) and suggests changes to its own prompt. Nothing changes until you apply a suggestion."
         actions={
-          <Button variant="primary" onClick={() => void runReview()} disabled={running || review?.running}>
-            {running || review?.running ? <Spinner /> : <Sparkles />}
-            {running || review?.running ? "Reviewing chats…" : "Review recent chats"}
+          <Button variant="primary" onClick={() => void runReview()} disabled={busy}>
+            {busy ? <Spinner /> : <Sparkles />}
+            {busy ? "Reviewing chats…" : "Review recent chats"}
           </Button>
         }
       />
+
+      {busy ? <ReviewProgressBar progress={review?.progress ?? null} /> : null}
 
       {review?.last ? (
         <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
@@ -106,7 +122,7 @@ export default function SuggestionsPage() {
       ) : shown.length === 0 ? (
         <EmptyState icon={<Inbox />} title={tab === "pending" ? "No suggestions waiting" : "Nothing here yet"}>
           {tab === "pending"
-            ? "Run a review, or ask the prompt assistant for a change on the Prompt page."
+            ? "Run a review, or ask the prompt assistant for a change."
             : "Applied and dismissed suggestions show up here."}
         </EmptyState>
       ) : (
@@ -124,6 +140,33 @@ export default function SuggestionsPage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function ReviewProgressBar({ progress }: { progress: ReviewProgress | null }) {
+  const reading = progress?.step === "reading";
+  const label = !progress
+    ? "Picking chats to review…"
+    : reading
+      ? `Reading chats — ${progress.done} of ${progress.total}`
+      : "Writing suggestions…";
+  const percent = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 0;
+
+  return (
+    <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
+      <p className="mb-2 text-sm font-medium" aria-live="polite">
+        {label}
+      </p>
+      <div className="h-2 overflow-hidden rounded-full bg-surface-2">
+        <div
+          className={cn(
+            "h-full rounded-full bg-accent transition-[width] duration-500",
+            progress && !reading && "animate-pulse",
+          )}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

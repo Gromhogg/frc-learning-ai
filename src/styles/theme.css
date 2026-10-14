@@ -20,11 +20,13 @@
   --fg-2: #3f3f46;
   --muted: #71717a;
   --faint: #a1a1aa;
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
+  --accent: #ea580c;
+  --accent-hover: #c2410c;
   --accent-fg: #ffffff;
-  --accent-soft: #eef0ff;
-  --accent-line: #c7cbff;
+  --accent-soft: #fff1e6;
+  --accent-line: #fdcfa6;
+  /* Orange for text on normal backgrounds (easier to read than --accent). */
+  --accent-text: #c2410c;
   --good: #15803d;
   --good-soft: #ecfdf3;
   --warn: #b45309;
@@ -47,11 +49,12 @@
   --fg-2: #c8c8ce;
   --muted: #8d8d96;
   --faint: #5f5f67;
-  --accent: #8b8cf8;
-  --accent-hover: #a5a6fb;
-  --accent-fg: #0b0b0d;
-  --accent-soft: #1d1d33;
-  --accent-line: #34356b;
+  --accent: #f97316;
+  --accent-hover: #fb923c;
+  --accent-fg: #1a0e05;
+  --accent-soft: #2a1709;
+  --accent-line: #5c2d0e;
+  --accent-text: #fb923c;
   --good: #4ade80;
   --good-soft: #0f2418;
   --warn: #fbbf24;
@@ -79,6 +82,7 @@
   --color-accent-fg: var(--accent-fg);
   --color-accent-soft: var(--accent-soft);
   --color-accent-line: var(--accent-line);
+  --color-accent-text: var(--accent-text);
   --color-good: var(--good);
   --color-good-soft: var(--good-soft);
   --color-warn: var(--warn);
@@ -186,7 +190,7 @@
   font-weight: 600;
 }
 .prose-chat a {
-  color: var(--accent);
+  color: var(--accent-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { History, SquarePen, Wand2 } from "lucide-react";
+import { useCallback, useEffect, useState, type HTMLAttributes } from "react";
+import { History, SquarePen, Wand2, X } from "lucide-react";
 import { toast } from "sonner";
 import { api, errorMessage } from "../../lib/api";
+import { cn } from "../../lib/cn";
 import { useAgentChat, type ChatMessage } from "../../hooks/use-agent-chat";
 import type { Step } from "../../lib/stream";
 import { timeAgo } from "../../lib/time";
@@ -20,6 +21,7 @@ interface AgentChat {
   updatedAt: string | null;
 }
 
+// Shown until the server's ideas load, and if they can't.
 const IDEAS = [
   "Make answers shorter for beginners",
   "Ask a follow-up question to check understanding",
@@ -31,10 +33,20 @@ const IDEAS = [
  * Chat with the prompt assistant. It reads the prompt and student chats and
  * proposes changes as drafts, which show up here with Apply / Dismiss.
  */
-export function AgentPanel({ onApplied }: { onApplied: () => void }) {
+export function AgentPanel({
+  onApplied,
+  onClose,
+  dragHandle,
+}: {
+  onApplied: () => void;
+  onClose?: () => void;
+  /** Spread onto the top bar, so the floating window can be dragged by it. */
+  dragHandle?: HTMLAttributes<HTMLDivElement>;
+}) {
   const [chatId, setChatId] = useState<number | null>(null);
   const [chats, setChats] = useState<AgentChat[]>([]);
   const [drafts, setDrafts] = useState<Record<number, Draft>>({});
+  const [ideas, setIdeas] = useState<string[]>(IDEAS);
   const chat = useAgentChat(chatId ? `/api/admin/agent/${chatId}/messages` : null);
   const { setMessages } = chat;
 
@@ -44,6 +56,15 @@ export function AgentPanel({ onApplied }: { onApplied: () => void }) {
       .catch(() => {});
   }, []);
   useEffect(loadChats, [loadChats]);
+
+  // Ideas picked from this week's activity (👎 answers, common chat topics).
+  useEffect(() => {
+    api<{ ideas: string[] }>("/api/admin/agent/ideas")
+      .then((data) => {
+        if (Array.isArray(data.ideas) && data.ideas.length > 0) setIdeas(data.ideas);
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch any drafts the agent mentions that we haven't loaded yet.
   const draftIds = chat.messages.flatMap((m) => m.steps.map((s) => s.draftId).filter((id): id is number => !!id));
@@ -102,13 +123,12 @@ export function AgentPanel({ onApplied }: { onApplied: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center gap-2 border-b border-line px-4 py-3">
-        <span className="inline-flex size-7 items-center justify-center rounded-lg bg-accent-soft text-accent">
+      <div {...dragHandle} className={cn("flex items-center gap-2 border-b border-line px-4 py-3", dragHandle?.className)}>
+        <span className="inline-flex size-7 items-center justify-center rounded-lg bg-accent-soft text-accent-text">
           <Wand2 className="size-4" />
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">Prompt assistant</p>
-          <p className="truncate text-xs text-muted">Describe a change — it drafts it for you to apply.</p>
         </div>
         <Menu>
           <Tooltip label="Past chats">
@@ -136,12 +156,19 @@ export function AgentPanel({ onApplied }: { onApplied: () => void }) {
             <SquarePen />
           </Button>
         </Tooltip>
+        {onClose ? (
+          <Tooltip label="Close">
+            <Button variant="ghost" size="icon-sm" aria-label="Close" onClick={onClose}>
+              <X />
+            </Button>
+          </Tooltip>
+        ) : null}
       </div>
 
       {chat.messages.length === 0 ? (
         <div className="flex min-h-0 flex-1 flex-col justify-end gap-2 overflow-y-auto p-4">
           <p className="mb-1 text-xs font-medium text-muted">Try asking</p>
-          {IDEAS.map((idea) => (
+          {ideas.map((idea) => (
             <button
               key={idea}
               type="button"

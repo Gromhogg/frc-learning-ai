@@ -1,10 +1,13 @@
 import { Hono } from "hono";
 import { requireAdmin, type AdminEnv } from "../../lib/require-auth.ts";
 import { MAX_DOC_BYTES } from "../../lib/config.ts";
+import { logEvent } from "../../lib/events.ts";
 import {
   isTextContent,
   listDocs,
+  listTrash,
   readDoc,
+  restoreFromTrash,
   sanitizeDocName,
   statDoc,
   trashDoc,
@@ -18,6 +21,30 @@ app.use("*", requireAdmin);
 
 // GET / — every doc in the library
 app.get("/", (c) => c.json({ docs: listDocs() }));
+
+// The trash routes come before "/:name" so "trash" is never read as a doc name.
+
+// GET /trash — deleted and replaced docs, newest first
+app.get("/trash", (c) => c.json({ trash: listTrash() }));
+
+// POST /trash/:trashName/restore — move a doc back into the library. If its
+// old name is taken now, it comes back as "name-2.md" instead of replacing anything.
+app.post("/trash/:trashName/restore", async (c) => {
+  const restored = restoreFromTrash(c.req.param("trashName"));
+  if (!restored) return c.json({ error: "That file isn't in the trash any more." }, 404);
+
+  const { doc, originalName } = restored;
+  const renamed = doc.name !== originalName;
+  await logEvent({
+    actorId: c.get("adminId"),
+    action: "doc.restore",
+    target: doc.name,
+    summary: renamed
+      ? `Restored ${originalName} from the trash as ${doc.name} (the old name was taken)`
+      : `Restored ${doc.name} from the trash`,
+  });
+  return c.json({ ok: true, doc, renamed });
+});
 
 // GET /:name — one doc with its full text, for previewing
 app.get("/:name", (c) => {
@@ -57,19 +84,38 @@ app.post("/", async (c) => {
     return c.json({ error: "mode must be replace or keep-both." }, 400);
   }
 
+  const replacing = mode === "replace" && statDoc(name) !== null;
   const result = writeDoc(name, bytes, mode ?? "create");
   if (result.status === "conflict") {
     return c.json({ error: `A doc named "${name}" already exists.`, existing: result.existing }, 409);
   }
 
+  const saved = result.doc.name;
+  await logEvent({
+    actorId: c.get("adminId"),
+    action: "doc.upload",
+    target: saved,
+    summary:
+      replacing
+        ? `Replaced ${saved} (the old copy is in the trash)`
+        : saved !== name
+          ? `Added ${saved} (kept both — ${name} already existed)`
+          : `Added ${saved}`,
+  });
   return c.json({ ok: true, doc: result.doc });
 });
 
 // DELETE /:name — moves the file into the trash folder, never destroys it
-app.delete("/:name", (c) => {
+app.delete("/:name", async (c) => {
   const name = sanitizeDocName(c.req.param("name"));
   if (!name) return c.json({ error: "Invalid doc name." }, 400);
   if (!trashDoc(name)) return c.json({ error: `No doc named "${name}".` }, 404);
+  await logEvent({
+    actorId: c.get("adminId"),
+    action: "doc.delete",
+    target: name,
+    summary: `Deleted ${name} (moved to the trash)`,
+  });
   return c.json({ ok: true });
 });
 

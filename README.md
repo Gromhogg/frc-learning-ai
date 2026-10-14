@@ -1,7 +1,10 @@
-# Robotics Mentor
+# 972 Chat Bot
 
-A chat app for an FRC robotics team. Students ask about the shop, the robot,
-wiring, CAD, or code — in text or with a photo — and an AI mentor answers.
+A chat app for FRC team 972. Students ask about the shop, the robot, wiring,
+CAD, or code — by typing, talking, or sending a photo — and an AI mentor
+answers. The starter questions on the empty chat screen are picked for each
+person, based on what they've been asking about. (Each person can see and
+clear this from their name menu → **Your interests**. Nobody else sees it.)
 
 **It gets better over time.** Three things help the AI improve, and a mentor
 approves every change before students see it:
@@ -25,9 +28,25 @@ There are two kinds of people:
 | Edit the AI's instructions, apply suggestions | ❌ | ✅ |
 | Review team facts, manage reference docs | ❌ | ✅ |
 
-The admin code is the only way to become an admin: type it when you sign up,
-or later from your name menu → **I'm a mentor (admin code)**. The server
-checks this on every admin request, not just in the screen.
+**Accounts.** New accounts need a school email (`@lghsstudent.org` or
+`@lghsuhsd.org`) and a 6-digit code that gets emailed to them. Google sign-in
+asks for the school email first, so it can't fall back to a personal Gmail.
+
+**Admins.** Everyone sees an **Admin** button. Typing the admin password once
+makes you an admin for good. The password is `ADMIN_CODE` in `.env`. Admins can
+see who else is an admin (Admin → **Admins**); nobody can remove admin access
+in the app. The server checks this on every admin request, not just in the
+screen, and allows 5 wrong tries per 15 minutes.
+
+**Nothing gets lost.** Prompt changes are saved as versions you can restore.
+If two admins edit at once, the second one sees both versions instead of
+overwriting. Removed facts and deleted docs can be restored. Admin → History →
+**Activity** shows who changed what.
+
+**Voice.** The mic button in the message box turns speech into text (Chrome,
+Edge, Safari). It sends one message when you press send, and stops on its own
+after 10 quiet seconds or 3 minutes without sending. The browser sends the
+audio to Google (Chrome) or Apple (Safari) to turn it into words.
 
 Built with:
 - **Screens** — React 19, Vite, Tailwind, Radix menus and dialogs (`src/`)
@@ -93,8 +112,12 @@ Three lines matter:
 - `ANTHROPIC_API_KEY=` — paste your `sk-ant-…` key here.
 - `JWT_SECRET=` — type a long random string of letters and numbers. It
   doesn't matter what, as long as it's long and you keep it private.
-- `ADMIN_CODE=` — make up a code. Anyone who types this becomes an
+- `ADMIN_CODE=` — the admin password. Anyone who types this becomes an
   admin, so only give it to mentors.
+
+To send sign-up codes by email, fill in the `SMTP_` lines (`.env.example`
+explains how to use a team Gmail account with an "app password"). Until then,
+codes are printed in the Terminal window instead of emailed.
 
 You can leave the two `GOOGLE_` lines alone — the app works fine without
 Google sign-in.
@@ -117,8 +140,8 @@ Leave this Terminal window open — closing it stops the app. When you see
 `Local: http://localhost:5173`, open that address in your browser.
 
 **7. Make your account.**
-Click **Create an account**. If you're a mentor, put your admin code in
-the "Admin code" box. Students leave it blank.
+Click **Create an account** and use your school email. Mentors then click
+**Admin** (top right) and type the admin password once.
 
 To stop the app, come back to the Terminal and press
 <kbd>Control</kbd> + <kbd>C</kbd>. To run it again later, just `cd
@@ -159,16 +182,18 @@ The assistant and reviewer can never change the live prompt themselves. They
 can only write a draft (`prompt_drafts` table). Applying a draft saves a normal
 new prompt version, so it shows in **History** and can be undone.
 
-Models are set in `server/lib/config.ts`:
+Admins pick which Claude model does each job on Admin → **Settings** (Haiku
+5.5, Sonnet 5.5, or Opus 5.5). The starting choices are in
+`server/lib/config.ts`:
 
 ```ts
 export const TUTOR_MODEL  = "claude-sonnet-5-5"; // answers students
 export const EDITOR_MODEL = "claude-opus-5-5";   // prompt assistant + reviewer
-export const LEARN_MODEL  = "claude-haiku-5-5";  // picks up team facts
+export const LEARN_MODEL  = "claude-haiku-5-5";  // picks up team facts + interests
 ```
 
 Spending limits (reviews per day, facts per day, tool calls per message) are in
-the same file.
+the same file; suggestion limits are at the top of `server/lib/suggestions.ts`.
 
 ---
 
