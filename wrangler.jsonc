@@ -1,0 +1,48 @@
+// Cloudflare setup for 972 Chat Bot: one Worker that serves the app and the
+// API, with a D1 database, an R2 bucket for files, a queue for Slack work,
+// and timed jobs. Secrets (API keys, passwords) are NOT kept here — set them
+// with `npx wrangler secret put NAME` (or in `.env` for local dev).
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "chatbot-972",
+  "main": "server/worker.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // The React app. Anything that isn't a file falls back to index.html so
+  // page links like /admin/facts work; these paths always go to the Worker.
+  "assets": {
+    "not_found_handling": "single-page-application",
+    // "/auth/callback" is a page in the React app (where Google sign-in lands).
+    "run_worker_first": ["/api/*", "/auth/*", "!/auth/callback", "/uploads/*", "/slack/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "chatbot972",
+      // Filled in after `npx wrangler d1 create chatbot972` (any value works locally).
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "drizzle"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "chatbot972-files" }],
+
+  "queues": {
+    "producers": [{ "binding": "SLACK_QUEUE", "queue": "chatbot972-slack" }],
+    "consumers": [{ "queue": "chatbot972-slack", "max_batch_size": 1, "max_retries": 2 }]
+  },
+
+  // Every 5 minutes: learn from quiet chats and Slack channels.
+  // Every hour: the daily reviewer check and the Slack daily digest.
+  "triggers": { "crons": ["*/5 * * * *", "0 * * * *"] },
+
+  "vars": {
+    // The app's public address. Set to the workers.dev address before deploying.
+    "APP_URL": "http://localhost:5173",
+    "SMTP_HOST": "smtp.gmail.com",
+    "SMTP_PORT": "465"
+  }
+}

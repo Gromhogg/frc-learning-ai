@@ -1,4 +1,4 @@
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 // Everyone who can sign in. Two roles only: "student" or "admin".
@@ -70,6 +70,8 @@ export const teamFacts = sqliteTable("team_facts", {
   // review queue. Null on facts that predate the review pipeline.
   sourceUserId: integer("source_user_id").references(() => users.id),
   sourceConversationId: integer("source_conversation_id").references(() => conversations.id),
+  // Where the fact came from when it wasn't a web chat, e.g. "Slack #build-team".
+  sourceLabel: text("source_label"),
   reviewedBy: integer("reviewed_by").references(() => users.id),
   reviewedAt: text("reviewed_at"),
   lastSeenAt: text("last_seen_at").default(sql`CURRENT_TIMESTAMP`),
@@ -173,6 +175,18 @@ export const emailCodes = sqliteTable("email_codes", {
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 
+// A person's own Claude API key, if they added one: their chats then run on
+// it instead of the team key. Kept in its own table so no query that loads
+// users can ever send it to a browser. Stored encrypted (server/ai/api-keys.ts);
+// only the last 4 characters are ever shown again.
+export const userApiKeys = sqliteTable("user_api_keys", {
+  userId: integer("user_id").primaryKey().references(() => users.id),
+  encryptedKey: text("encrypted_key").notNull(),
+  // e.g. "…a1B2"
+  hint: text("hint").notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
 // What the AI has learned about one person's interests, from their own
 // chats, plus their cached starter suggestions. Only used for that person.
 export const userProfiles = sqliteTable("user_profiles", {
@@ -201,4 +215,82 @@ export const adminEvents = sqliteTable("admin_events", {
   target: text("target"),
   summary: text("summary").notNull(),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// ─── Housekeeping (things that used to live in server memory) ──────────────
+// Cloudflare runs many short-lived copies of the server, so counters and
+// limits have to live in the database to mean anything.
+
+// Daily spending brakes, e.g. key "learn:total" or "learn:user:12", day "2026-10-12".
+export const usageCounters = sqliteTable(
+  "usage_counters",
+  {
+    key: text("key").notNull(),
+    day: text("day").notNull(),
+    count: integer("count").notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.key, t.day] })],
+);
+
+// Rate limits on things like admin-password tries or code resends.
+// key e.g. "admin-code:user:12"; the window restarts when it runs out.
+export const attempts = sqliteTable("attempts", {
+  key: text("key").primaryKey(),
+  count: integer("count").notNull().default(0),
+  windowStart: text("window_start").notNull(),
+});
+
+// ─── Slack ──────────────────────────────────────────────────────────────────
+
+// One Slack account ↔ one app account, matched by school email.
+export const slackUsers = sqliteTable("slack_users", {
+  slackUserId: text("slack_user_id").primaryKey(),
+  userId: integer("user_id").references(() => users.id).notNull(),
+  slackTeamId: text("slack_team_id"),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// One Slack thread (or DM stretch) ↔ one app chat.
+export const slackThreads = sqliteTable(
+  "slack_threads",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    channelId: text("channel_id").notNull(),
+    // The thread's first message time; for DMs, the first message of that stretch.
+    threadTs: text("thread_ts").notNull(),
+    conversationId: integer("conversation_id").references(() => conversations.id).notNull(),
+    lastActivityAt: text("last_activity_at").default(sql`CURRENT_TIMESTAMP`),
+  },
+  (t) => [uniqueIndex("slack_threads_channel_thread").on(t.channelId, t.threadTs)],
+);
+
+// One bot reply posted in Slack ↔ one saved message, so 👍/👎 reactions on it
+// can be saved as feedback.
+export const slackMessages = sqliteTable(
+  "slack_messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    channelId: text("channel_id").notNull(),
+    ts: text("ts").notNull(),
+    messageId: integer("message_id").references(() => messages.id).notNull(),
+  },
+  (t) => [uniqueIndex("slack_messages_channel_ts").on(t.channelId, t.ts)],
+);
+
+// Messages from channels the bot learns from, kept only until the next
+// learning pass reads them (then deleted).
+export const slackChannelBuffer = sqliteTable("slack_channel_buffer", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  channelId: text("channel_id").notNull(),
+  channelName: text("channel_name"),
+  ts: text("ts").notNull(),
+  slackUserId: text("slack_user_id"),
+  text: text("text").notNull(),
+  createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
+});
+
+// Slack retries events it thinks we missed; remember ids so we act once.
+export const slackEventsSeen = sqliteTable("slack_events_seen", {
+  eventId: text("event_id").primaryKey(),
+  seenAt: text("seen_at").default(sql`CURRENT_TIMESTAMP`),
 });

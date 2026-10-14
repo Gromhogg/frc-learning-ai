@@ -1,5 +1,7 @@
 // One place that knows where the server is, and how to talk to it.
-export const API_BASE = import.meta.env.VITE_API_URL ?? "http://localhost:3001";
+// The app and the server share one address (one Cloudflare Worker), so API
+// paths are relative. VITE_API_URL can point somewhere else if ever needed.
+export const API_BASE = import.meta.env.VITE_API_URL ?? "";
 
 const TOKEN_KEY = "auth_token";
 

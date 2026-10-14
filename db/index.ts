@@ -1,17 +1,8 @@
-import { mkdirSync } from "node:fs";
-import Database from "better-sqlite3";
-import { drizzle } from "drizzle-orm/better-sqlite3";
-import { migrate } from "drizzle-orm/better-sqlite3/migrator";
+import { env } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
 import * as schema from "./schema";
 
-mkdirSync("./data", { recursive: true });
-const sqlite = new Database("./data/app.db");
-// WAL lets the chat stream keep writing while admins read history.
-sqlite.pragma("journal_mode = WAL");
-
-export const db = drizzle(sqlite, { schema });
-
-/** Bring the database up to date. Safe to call on every start. */
-export function runMigrations(): void {
-  migrate(db, { migrationsFolder: "./drizzle" });
-}
+// The app's database: Cloudflare D1 (SQLite in the cloud). Every file imports
+// `db` from here. Migrations live in /drizzle and are applied with
+// `npx wrangler d1 migrations apply chatbot972` (add --remote for the real one).
+export const db = drizzle(env.DB, { schema });

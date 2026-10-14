@@ -1,12 +1,16 @@
 import { Hono } from "hono";
 import { getAuth } from "../lib/require-auth.ts";
 import {
+  getUpload,
+  imageTypeOf,
   saveImage,
   isAllowedImageType,
   MAX_IMAGE_BYTES,
   MAX_IMAGES_PER_MESSAGE,
 } from "../lib/uploads.ts";
 
+// Mounted twice: at /api/uploads (sending photos, signed in) and at /uploads
+// (showing a photo by its name — the random name is what keeps it private).
 const app = new Hono();
 
 // POST / — accept up to a few photos, return the URLs to reference them by
@@ -33,10 +37,28 @@ app.post("/", async (c) => {
     if (file.size > MAX_IMAGE_BYTES) {
       return c.json({ error: "That photo is too large (5 MB max)." }, 400);
     }
-    urls.push(saveImage(Buffer.from(await file.arrayBuffer()), file.type));
+    urls.push(await saveImage(new Uint8Array(await file.arrayBuffer()), file.type));
   }
 
   return c.json({ urls });
+});
+
+// GET /:file — one saved photo. A photo never changes once saved, so the
+// browser may keep it for a long time.
+app.get("/:file", async (c) => {
+  const file = c.req.param("file");
+  const obj = await getUpload(file);
+  if (!obj) return c.json({ error: "Photo not found." }, 404);
+
+  return new Response(obj.body, {
+    headers: {
+      "Content-Type": imageTypeOf(file),
+      "Content-Length": String(obj.size),
+      "Cache-Control": "public, max-age=31536000, immutable",
+      ETag: obj.httpEtag,
+      "X-Content-Type-Options": "nosniff",
+    },
+  });
 });
 
 export default app;

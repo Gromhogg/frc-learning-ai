@@ -57,7 +57,7 @@ const DEFAULTS: Record<AgentRole, string> = {
   learn: LEARN_MODEL,
 };
 
-const cache = new Map<AgentRole, string>();
+const cache = new Map<AgentRole, { id: string; until: number }>();
 
 export function settingKey(role: AgentRole): string {
   return `model.${role}`;
@@ -67,19 +67,26 @@ export function isAllowedModel(id: string): boolean {
   return MODEL_CHOICES.some((m) => m.id === id);
 }
 
-/** The model id an agent should use right now. */
-export function modelIdFor(role: AgentRole): string {
+// Each server copy remembers the choice for a short time, so a change made on
+// the Settings page reaches every copy within a minute.
+const CACHE_MS = 60_000;
+
+/**
+ * The model id an agent should use right now. `fresh` skips the short cache —
+ * the Settings page uses it so its "did someone change this?" check is exact.
+ */
+export async function modelIdFor(role: AgentRole, opts: { fresh?: boolean } = {}): Promise<string> {
   const cached = cache.get(role);
-  if (cached) return cached;
-  const row = db.select().from(settings).where(eq(settings.key, settingKey(role))).get();
+  if (!opts.fresh && cached && cached.until > Date.now()) return cached.id;
+  const [row] = await db.select().from(settings).where(eq(settings.key, settingKey(role)));
   const id = row && isAllowedModel(row.value) ? row.value : DEFAULTS[role];
-  cache.set(role, id);
+  cache.set(role, { id, until: Date.now() + CACHE_MS });
   return id;
 }
 
 /** The Pi model object an agent should use right now. */
-export function modelFor(role: AgentRole): Model<"anthropic-messages"> {
-  return claude(modelIdFor(role));
+export async function modelFor(role: AgentRole): Promise<Model<"anthropic-messages">> {
+  return claude(await modelIdFor(role));
 }
 
 /** Forget cached choices — call after the settings change. */

@@ -6,8 +6,8 @@ import { sanitizeDocName, writeDoc } from "./docs.ts";
 import { appendSystemVersion, currentVersion } from "./prompt.ts";
 
 // One-time move of the old inline "SHOP & TEAM REFERENCE" section out of the
-// live prompt and into the docs library. Runs at every server start but does
-// its work exactly once, guarded by a settings flag — flag-based on purpose,
+// live prompt and into the docs library. Runs when each server copy starts but
+// does its work exactly once, guarded by a settings flag — flag-based on purpose,
 // so an admin who deliberately restores the old long prompt from history is
 // never re-slimmed behind their back.
 
@@ -39,7 +39,7 @@ export async function ensureDocsMigrated(): Promise<void> {
         if (!name) continue;
         // keep-both: lands on the plain name normally, and never overwrites
         // if a file with that name somehow already exists.
-        writeDoc(name, Buffer.from(`# ${section.heading}\n\n${section.body}\n`), "keep-both");
+        await writeDoc(name, new TextEncoder().encode(`# ${section.heading}\n\n${section.body}\n`), "keep-both");
       }
 
       await appendSystemVersion(

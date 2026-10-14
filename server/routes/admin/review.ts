@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { requireAdmin, type AdminEnv } from "../../lib/require-auth.ts";
-import { isReviewRunning, lastReview, reviewProgress, runReview } from "../../agents/reviewer.ts";
+import { lastReview, reviewStatus, runReview } from "../../agents/reviewer.ts";
 
 // The self-improvement reviewer: see when it last ran, or run it now.
 
@@ -8,7 +8,8 @@ const app = new Hono<AdminEnv>();
 app.use("*", requireAdmin);
 
 app.get("/", async (c) => {
-  return c.json({ running: isReviewRunning(), progress: reviewProgress(), last: await lastReview() });
+  const [{ running, progress }, last] = await Promise.all([reviewStatus(), lastReview()]);
+  return c.json({ running, progress, last });
 });
 
 // POST / — run a review now. Takes a minute or two; the browser waits and

@@ -19,16 +19,19 @@ How you work:
 - The tutor's prompt also gets two blocks added automatically: the list of reference docs and the approved team facts. Don't copy those into sections.
 - Reply in short, plain sentences. The admins are mentors, not programmers — avoid jargon.`;
 
-export function createPromptEditor(input: {
+export async function createPromptEditor(input: {
   history: AgentMessage[];
   adminId: number;
   chatId: number;
-}): Agent {
+  /** The admin's own key, else the team key (see ai/api-keys.ts). */
+  apiKey: string | undefined;
+}): Promise<Agent> {
   let toolCalls = 0;
   return new Agent({
+    getApiKey: async () => input.apiKey,
     initialState: {
       systemPrompt: EDITOR_PROMPT,
-      model: modelFor("editor"),
+      model: await modelFor("editor"),
       thinkingLevel: "off",
       tools: [
         ...sharedReadTools,

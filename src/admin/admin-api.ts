@@ -53,6 +53,8 @@ export interface Fact {
   version: number;
   createdAt: string | null;
   sourceUserName: string | null;
+  /** Where it came from when it wasn't a web chat, e.g. "Slack #build-team". */
+  sourceLabel: string | null;
   reviewedByName: string | null;
   reviewedAt: string | null;
 }
@@ -103,6 +105,37 @@ export interface ModelSettings {
   choices: ModelChoice[];
   models: Record<AgentRole, string>;
 }
+
+export interface TeamKeyStatus {
+  /** "settings" = an admin set it here; "setup" = the server secret; "none" = no key. */
+  source: "settings" | "setup" | "none";
+  /** e.g. "…a1B2" */
+  hint: string | null;
+  setByName: string | null;
+  setAt: string | null;
+  /** How many people use their own key instead. */
+  ownKeyCount: number;
+}
+
+export interface SlackChannelOption {
+  id: string;
+  name: string;
+  /** The bot has been invited, so it can post and read there. */
+  isMember: boolean;
+}
+
+export type SlackSettings =
+  | { configured: false }
+  | {
+      configured: true;
+      team?: string;
+      botName?: string;
+      /** Set when Slack didn't answer, e.g. a wrong bot token. */
+      error?: string;
+      alertChannel: string | null;
+      learnChannels: string[];
+      channels: SlackChannelOption[];
+    };
 
 export interface AdminEvent {
   id: number;
@@ -188,6 +221,26 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ role, model, expected }),
     }),
+
+  teamKey: () => api<TeamKeyStatus>("/api/admin/settings/api-key"),
+  setTeamKey: (key: string, expected: string | null) =>
+    api<TeamKeyStatus & { ok: true }>("/api/admin/settings/api-key", {
+      method: "PUT",
+      body: JSON.stringify({ key, expected }),
+    }),
+  removeTeamKey: (expected: string | null) =>
+    api<TeamKeyStatus & { ok: true }>(
+      `/api/admin/settings/api-key?expected=${encodeURIComponent(expected ?? "")}`,
+      { method: "DELETE" },
+    ),
+
+  slack: () => api<SlackSettings>("/api/admin/slack"),
+  saveSlack: (alertChannel: string | null, learnChannels: string[]) =>
+    api<SlackSettings & { ok: true }>("/api/admin/slack", {
+      method: "PUT",
+      body: JSON.stringify({ alertChannel, learnChannels }),
+    }),
+  testSlackAlert: () => api<{ ok: true }>("/api/admin/slack/test-alert", { method: "POST" }),
 
   events: () => api<{ events: AdminEvent[] }>("/api/admin/events"),
 };

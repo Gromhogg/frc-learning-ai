@@ -34,6 +34,8 @@ export interface FactRow {
   createdAt: string | null;
   /** Which student's chat surfaced this — null for facts that predate review. */
   sourceUserName: string | null;
+  /** Where it came from when it wasn't a web chat, e.g. "Slack #build-team". */
+  sourceLabel: string | null;
   /** Who last approved, rejected, or restored it, and when. */
   reviewedByName: string | null;
   reviewedAt: string | null;
@@ -78,6 +80,7 @@ export async function listFacts(): Promise<{ pending: FactRow[]; approved: FactR
     version: teamFacts.version,
     createdAt: teamFacts.createdAt,
     sourceUserName: users.name,
+    sourceLabel: teamFacts.sourceLabel,
     reviewedByName: reviewer.name,
     reviewedAt: teamFacts.reviewedAt,
   };
@@ -122,11 +125,16 @@ export async function listFactsForExtraction() {
  * Queue a freshly extracted fact for review. Returns why it was skipped so
  * the learner can log it. Duplicate checks run against every status —
  * matching a rejected fact means an admin already said no.
+ *
+ * Facts from a student's chat carry their user and conversation. Facts from
+ * elsewhere (a Slack channel) have no user — just a `sourceLabel` like
+ * "Slack #build-team" — and skip the per-student cap.
  */
 export async function insertPendingFact(input: {
   text: string;
-  sourceUserId: number;
-  sourceConversationId: number;
+  sourceUserId: number | null;
+  sourceConversationId: number | null;
+  sourceLabel?: string | null;
 }): Promise<"inserted" | "duplicate" | "user-capped"> {
   const clean = input.text.trim().slice(0, 300);
   const key = normalizeFact(clean);
@@ -135,17 +143,20 @@ export async function insertPendingFact(input: {
   const existing = await db.select({ text: teamFacts.text }).from(teamFacts);
   if (existing.some((f) => normalizeFact(f.text) === key)) return "duplicate";
 
-  const [{ count: userPending }] = await db
-    .select({ count: sql<number>`COUNT(*)` })
-    .from(teamFacts)
-    .where(and(eq(teamFacts.status, "pending"), eq(teamFacts.sourceUserId, input.sourceUserId)));
-  if (userPending >= MAX_PENDING_PER_USER) return "user-capped";
+  if (input.sourceUserId !== null) {
+    const [{ count: userPending }] = await db
+      .select({ count: sql<number>`COUNT(*)` })
+      .from(teamFacts)
+      .where(and(eq(teamFacts.status, "pending"), eq(teamFacts.sourceUserId, input.sourceUserId)));
+    if (userPending >= MAX_PENDING_PER_USER) return "user-capped";
+  }
 
   await db.insert(teamFacts).values({
     text: clean,
     status: "pending",
     sourceUserId: input.sourceUserId,
     sourceConversationId: input.sourceConversationId,
+    sourceLabel: input.sourceLabel?.trim().slice(0, 120) || null,
     lastSeenAt: new Date().toISOString(),
   });
   return "inserted";

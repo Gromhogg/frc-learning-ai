@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { conversations, messageFeedback, messages } from "../../db/schema.ts";
+import { conversations, messageFeedback, messages, slackMessages } from "../../db/schema.ts";
 import { getAuth } from "../lib/require-auth.ts";
 import { readImageForModel, MAX_IMAGES_PER_MESSAGE } from "../lib/uploads.ts";
-import { noteExchange } from "../lib/learn.ts";
 import { createTutor, describeTutorStep } from "../agents/tutor.ts";
-import { historyToMessages, runAgentTurn, type ClientEvent } from "../ai/run-agent.ts";
+import { historyToMessages, orderedSender, runAgentTurn } from "../ai/run-agent.ts";
 import { modelFor } from "../ai/models.ts";
+import { NO_KEY, apiKeyFor } from "../ai/api-keys.ts";
 import type { ImageContent } from "@mariozechner/pi-ai";
 
 const app = new Hono();
@@ -20,8 +20,9 @@ function titleFrom(text: string): string {
   return `${oneLine.slice(0, 50).replace(/\s+\S*$/, "")}…`;
 }
 
-function imagesFor(paths: string[]): ImageContent[] {
-  return paths.map(readImageForModel).filter((i): i is ImageContent => i !== null);
+async function imagesFor(paths: string[]): Promise<ImageContent[]> {
+  const images = await Promise.all(paths.map(readImageForModel));
+  return images.filter((i): i is ImageContent => i !== null);
 }
 
 // POST / — send a message (or retry the last answer) and stream the reply.
@@ -48,6 +49,11 @@ app.post("/", async (c) => {
     .where(and(eq(conversations.id, conversationId), eq(conversations.userId, auth.userId)));
   if (!conversation) return c.json({ error: "Conversation not found." }, 404);
 
+  // Checked before anything is saved, so a missing key doesn't leave a
+  // question with no answer.
+  const apiKey = await apiKeyFor(auth.userId);
+  if (!apiKey.key) return c.json({ error: NO_KEY }, 503);
+
   let userText: string;
   let userImages: string[];
   let userMessageId: number | undefined;
@@ -62,7 +68,10 @@ app.post("/", async (c) => {
       .orderBy(desc(messages.id))
       .limit(1);
     if (last?.role === "assistant") {
+      // Children first (the database enforces links): thumbs, the Slack
+      // copy of the reply (if it came from Slack), then the reply itself.
       await db.delete(messageFeedback).where(eq(messageFeedback.messageId, last.id));
+      await db.delete(slackMessages).where(eq(slackMessages.messageId, last.id));
       await db.delete(messages).where(eq(messages.id, last.id));
     }
     const [question] = await db
@@ -102,25 +111,26 @@ app.post("/", async (c) => {
     .from(messages)
     .where(eq(messages.conversationId, conversationId))
     .orderBy(asc(messages.id));
-  const prior = rows.slice(0, -1).map((m) => ({
-    role: m.role,
-    text: m.text,
-    images: m.role === "user" ? imagesFor(JSON.parse(m.images) as string[]) : undefined,
-  }));
+  const prior = await Promise.all(
+    rows.slice(0, -1).map(async (m) => ({
+      role: m.role,
+      text: m.text,
+      images: m.role === "user" ? await imagesFor(JSON.parse(m.images) as string[]) : undefined,
+    })),
+  );
 
-  const agent = await createTutor(historyToMessages(prior, modelFor("tutor")));
+  const agent = await createTutor(historyToMessages(prior, await modelFor("tutor")), apiKey.key);
 
   return streamSSE(c, async (stream) => {
     stream.onAbort(() => agent.abort());
-    const send = (event: ClientEvent) => {
-      void stream.writeSSE({ data: JSON.stringify(event) });
-    };
+    const { send, flushed } = orderedSender((data) => stream.writeSSE({ data }));
 
     const result = await runAgentTurn(
       agent,
-      { text: userText, images: imagesFor(userImages) },
+      { text: userText, images: await imagesFor(userImages) },
       send,
       describeTutorStep,
+      { ownKey: apiKey.own },
     );
 
     // Save whatever was written, even after a stop or an error, so the
@@ -133,7 +143,7 @@ app.post("/", async (c) => {
           conversationId,
           role: "assistant",
           text: result.text,
-          steps: JSON.stringify(result.steps.map(({ id, tool, label }) => ({ id, tool, label, status: "done" }))),
+          steps: JSON.stringify(result.steps.map(({ id, tool, label, images }) => ({ id, tool, label, status: "done", images }))),
         })
         .returning({ id: messages.id });
       messageId = saved.id;
@@ -145,10 +155,7 @@ app.post("/", async (c) => {
 
     if (result.error && result.error !== "Stopped.") send({ type: "error", message: result.error });
     send({ type: "done", messageId, userMessageId });
-
-    // Just a wake-up nudge — the background sweep extracts facts from the
-    // whole conversation once it goes quiet, one batched call per session.
-    if (messageId) noteExchange(conversationId);
+    await flushed();
   });
 });
 

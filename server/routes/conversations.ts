@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, and, inArray } from "drizzle-orm";
 import { db } from "../../db/index.ts";
-import { conversations, messageFeedback, messages, teamFacts } from "../../db/schema.ts";
+import { conversations, messageFeedback, messages, slackMessages, slackThreads, teamFacts } from "../../db/schema.ts";
 import { getAuth } from "../lib/require-auth.ts";
 import { feedbackFor } from "./chat.ts";
 
@@ -93,7 +93,12 @@ app.delete("/:id", async (c) => {
   const ids = (
     await db.select({ id: messages.id }).from(messages).where(eq(messages.conversationId, id))
   ).map((m) => m.id);
-  if (ids.length > 0) await db.delete(messageFeedback).where(inArray(messageFeedback.messageId, ids));
+  if (ids.length > 0) {
+    await db.delete(messageFeedback).where(inArray(messageFeedback.messageId, ids));
+    await db.delete(slackMessages).where(inArray(slackMessages.messageId, ids));
+  }
+  // A chat that started in Slack is linked to its Slack thread.
+  await db.delete(slackThreads).where(eq(slackThreads.conversationId, id));
   await db.delete(messages).where(eq(messages.conversationId, id));
   // Learned facts outlive the chat they came from — just unlink them.
   await db

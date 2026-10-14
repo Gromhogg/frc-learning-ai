@@ -12,18 +12,12 @@ export const TUTOR_MODEL = "claude-sonnet-5-5";
 export const EDITOR_MODEL = "claude-opus-5-5";
 export const LEARN_MODEL = "claude-haiku-5-5";
 
-// Where the app runs in development.
-export const FRONTEND_URL = "http://localhost:5173";
-export const SERVER_PORT = Number(process.env.PORT) || 3001;
-
-// Uploaded photos live here, and are served at /uploads/<filename>.
-export const UPLOAD_DIR = "data/uploads";
+// The app's public address, with no "/" at the end. Set in wrangler.jsonc
+// (the workers.dev address once it's live). Used for Google sign-in.
+export const APP_URL = (process.env.APP_URL || "http://localhost:5173").replace(/\/+$/, "");
 
 // Reference docs the AI can open mid-answer. Admins manage these from the
-// prompt page; replaced and deleted files are moved into the trash folder
-// (never destroyed), so nothing an admin wrote can be silently lost.
-export const DOCS_DIR = "data/docs";
-export const DOCS_TRASH_DIR = "data/docs/.trash";
+// prompt page; they're kept in the R2 bucket (see docs.ts).
 export const MAX_DOC_BYTES = 100 * 1024; // docs are prompt-fed text; 100 KB is already a lot of it
 
 // How many docs the AI may open while answering a single message.
@@ -37,17 +31,16 @@ export const MAX_TEAM_FACTS = 60;
 
 // ─── Fact learning (background extraction) ─────────────────────────────────
 //
-// Extraction runs per conversation batch, not per message: a sweep wakes up
-// every LEARN_SWEEP_INTERVAL_MS, and a conversation gets one extraction call
-// once it has been quiet for LEARN_IDLE_MINUTES (or has piled up
-// LEARN_MAX_EXCHANGES_PER_BATCH unlearned exchanges mid-build-session).
-export const LEARN_SWEEP_INTERVAL_MS = 60_000;
+// Extraction runs per conversation batch, not per message: a sweep runs
+// every 5 minutes (the timed job in wrangler.jsonc), and a conversation gets
+// one extraction call once it has been quiet for LEARN_IDLE_MINUTES (or has
+// piled up LEARN_MAX_EXCHANGES_PER_BATCH unlearned exchanges mid-build-session).
 export const LEARN_IDLE_MINUTES = 10;
 export const LEARN_MAX_EXCHANGES_PER_BATCH = 20;
 
 // Circuit breakers on extraction spend. The global cap bounds the worst day;
 // the per-user cap bounds one student spawning conversations all afternoon.
-// Counters live in memory and reset at midnight (or on restart) — they're a
+// Counters live in the database and start over each day (UTC) — they're a
 // soft brake, not an audit.
 export const LEARN_DAILY_CALL_CAP = 200;
 export const LEARN_MAX_CALLS_PER_USER_DAY = 10;

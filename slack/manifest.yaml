@@ -1,0 +1,56 @@
+# Slack app setup for 972 Chat Bot.
+#
+# How to create the app from this file:
+#   1. Change REPLACE-WITH-YOUR-APP below to your Worker's address
+#      (for example chatbot-972.your-account).
+#   2. Go to https://api.slack.com/apps → "Create New App" → "From a manifest",
+#      pick the team's workspace, paste this whole file, and click Create.
+#   3. Click "Install to Workspace". Then copy the "Bot User OAuth Token"
+#      (OAuth & Permissions, starts with xoxb-) and the "Signing Secret"
+#      (Basic Information), and save them:
+#        npx wrangler secret put SLACK_BOT_TOKEN
+#        npx wrangler secret put SLACK_SIGNING_SECRET
+#   4. In Slack's "Event Subscriptions" page, click "Retry" next to the
+#      request URL so Slack checks it again now that the secrets are set.
+#   5. Invite the bot to channels it should post in or learn from
+#      (/invite @972 Chat Bot), then pick them on the app's Settings page.
+display_information:
+  name: 972 Chat Bot
+  description: Robotics helper for FRC Team 972. Ask it anything about the robot or the shop.
+  background_color: "#c2410c"
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: 972 Chat Bot
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read
+      - chat:write
+      - im:history
+      - im:read
+      - im:write
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - users:read
+      - users:read.email
+      - reactions:read
+settings:
+  event_subscriptions:
+    request_url: https://REPLACE-WITH-YOUR-APP.workers.dev/slack/events
+    bot_events:
+      - app_mention
+      - message.im
+      - message.channels
+      - message.groups
+      - reaction_added
+      - reaction_removed
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false

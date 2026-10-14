@@ -1,10 +1,12 @@
-import { AlertCircle, BookOpen, Check, FileDiff, MessagesSquare, ScrollText, Search } from "lucide-react";
+import { AlertCircle, BookOpen, Check, FileDiff, Globe, Images, MessagesSquare, ScrollText, Search } from "lucide-react";
 import type { Step } from "../../lib/stream";
 import { cn } from "../../lib/cn";
 import { Spinner } from "../ui/misc";
 
 const ICONS: Record<string, typeof BookOpen> = {
   read_doc: BookOpen,
+  find_images: Images,
+  web_search: Globe,
   get_prompt: ScrollText,
   search_chats: Search,
   read_chat: MessagesSquare,

@@ -1,9 +1,11 @@
+import { waitUntil } from "cloudflare:workers";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { promptDrafts, users } from "../../db/schema.ts";
 import { logEvent } from "./events.ts";
 import { currentVersion, getVersion, saveSections, sectionsOf, type PromptVersion } from "./prompt.ts";
 import { parseDoc, serializeDoc, SECTIONS_FORMAT, type PromptSection } from "./prompt-sections.ts";
+import { alertNewSuggestion } from "../slack/alerts.ts";
 
 // Prompt drafts: changes an agent proposes but never applies. An admin
 // applies one (a normal new prompt version, same conflict rules as a person
@@ -62,6 +64,16 @@ export async function createDraft(input: {
     target: `draft #${row.id}`,
     summary: `${input.source === "review" ? "Reviewer suggested" : "Prompt assistant drafted"}: ${row.title}`,
   });
+
+  // Tell admins in Slack (if set up) — in the background, and a failed alert
+  // never undoes or blocks the draft.
+  if (input.source === "review") {
+    try {
+      waitUntil(alertNewSuggestion(row.title).catch((err) => console.error("Suggestion alert failed:", err)));
+    } catch (err) {
+      console.error("Couldn't send the suggestion alert:", err);
+    }
+  }
   return row.id;
 }
 

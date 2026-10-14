@@ -1,18 +1,24 @@
+import { waitUntil } from "cloudflare:workers";
 import { completeSimple } from "@mariozechner/pi-ai";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { conversations, teamFacts, userProfiles } from "../../db/schema.ts";
 import { modelFor } from "../ai/models.ts";
+import { apiKeyFor } from "../ai/api-keys.ts";
 import type { Role } from "./jwt.ts";
 import { listDocs } from "./docs.ts";
 import { findProfile, signalKey, strongSignals, type Profile } from "./interests.ts";
+// Renamed here only because the React lint rule treats any "use…" name as a React hook.
+import { clearAttempts, takeAttempt, useDailyAllowance as takeDailyAllowance } from "./limits.ts";
 
 // The starter chips on each person's empty chat screen.
 //
 // getSuggestions() always answers instantly: the person's saved list if they
 // have one, else the defaults for their role. When their interests changed,
 // it also starts a rebuild in the background (one small AI call), so the new
-// list is ready the next time they open a new chat.
+// list is ready the next time they open a new chat. waitUntil() lets that
+// rebuild finish after the reply is sent — without it, Cloudflare would stop
+// it as soon as the response ends.
 
 // Keep these in sync with src/hooks/use-suggestions.ts.
 export const STUDENT_DEFAULTS = [
@@ -33,6 +39,9 @@ const REBUILD_AFTER_HOURS = 6; // a saved list is kept at least this long
 const MAX_REBUILDS_PER_USER_DAY = 4;
 const MAX_REBUILDS_PER_DAY = 300;
 const MAX_SUGGESTION_CHARS = 70;
+// While one rebuild runs, more requests for the same person don't start
+// another. Kept in the database (many server copies); runs out on its own.
+const REBUILD_BUSY_MS = 60_000;
 
 export interface SuggestionsReply {
   suggestions: string[];
@@ -59,7 +68,7 @@ export async function getSuggestions(userId: number, role: Role): Promise<Sugges
 
   const { topics, focus } = strongSignals(profile);
   const hasSignals = topics.length > 0 || !!focus;
-  if (hasSignals && shouldRebuild(profile)) void rebuild(userId, role);
+  if (hasSignals && shouldRebuild(profile)) waitUntil(rebuild(userId, role));
 
   const saved = parseList(profile.suggestions);
   if (hasSignals && saved.length === 4) return { suggestions: saved, personalized: true };
@@ -71,22 +80,6 @@ function shouldRebuild(profile: Profile): boolean {
   if (!profile.suggestionsGeneratedAt) return true;
   const age = Date.now() - new Date(profile.suggestionsGeneratedAt).getTime();
   return Number.isNaN(age) || age >= REBUILD_AFTER_HOURS * 3_600_000;
-}
-
-// ─── spend brakes (in memory, reset each day or on restart) ───────────────
-
-const inFlight = new Set<number>();
-let spend = { day: "", total: 0, byUser: new Map<number, number>() };
-
-function takeRebuildSlot(userId: number): boolean {
-  const day = new Date().toDateString();
-  if (spend.day !== day) spend = { day, total: 0, byUser: new Map() };
-  if (spend.total >= MAX_REBUILDS_PER_DAY) return false;
-  const mine = spend.byUser.get(userId) ?? 0;
-  if (mine >= MAX_REBUILDS_PER_USER_DAY) return false;
-  spend.total += 1;
-  spend.byUser.set(userId, mine + 1);
-  return true;
 }
 
 // ─── the rebuild ───────────────────────────────────────────────────────────
@@ -145,7 +138,7 @@ async function buildInput(userId: number, role: Role, profile: Profile): Promise
     .where(eq(teamFacts.status, "approved"))
     .orderBy(desc(teamFacts.mentionCount))
     .limit(20);
-  const docs = listDocs()
+  const docs = (await listDocs())
     .slice(0, 40)
     .map((d) => d.title || d.name);
   const recent = await db
@@ -168,25 +161,32 @@ async function buildInput(userId: number, role: Role, profile: Profile): Promise
 
 /**
  * Ask the model for 4 new suggestions and save them. Never throws; on any
- * failure the old list stays. One at a time per person, within daily caps.
+ * failure the old list stays. One at a time per person, within daily caps
+ * (counted in the database, see limits.ts).
  */
 export async function rebuild(userId: number, role: Role): Promise<string[] | null> {
-  if (!process.env.ANTHROPIC_API_KEY) return null;
-  if (inFlight.has(userId)) return null;
-  if (!takeRebuildSlot(userId)) return null;
-  inFlight.add(userId);
+  const { key: apiKey } = await apiKeyFor(userId);
+  if (!apiKey) return null;
+  const busyKey = `suggest:busy:${userId}`;
+  let mine = false;
   try {
+    mine = (await takeAttempt(busyKey, 1, REBUILD_BUSY_MS)).allowed;
+    if (!mine) return null;
+    if (!(await takeDailyAllowance(`suggest:user:${userId}`, MAX_REBUILDS_PER_USER_DAY))) return null;
+    if (!(await takeDailyAllowance("suggest:total", MAX_REBUILDS_PER_DAY))) return null;
+
     const profile = await findProfile(userId);
     if (!profile) return null;
     const startKey = signalKey(profile);
 
     const reply = await completeSimple(
-      modelFor("learn"),
+      await modelFor("learn"),
       {
         systemPrompt: SUGGEST_INSTRUCTIONS,
         messages: [{ role: "user", content: await buildInput(userId, role, profile), timestamp: Date.now() }],
       },
       {
+        apiKey,
         onPayload: (payload) => ({
           ...(payload as object),
           max_tokens: 1_000,
@@ -228,6 +228,6 @@ export async function rebuild(userId: number, role: Role): Promise<string[] | nu
     console.error(`Suggestions for user ${userId} failed (old list kept):`, err);
     return null;
   } finally {
-    inFlight.delete(userId);
+    if (mine) await clearAttempts(busyKey).catch(() => {});
   }
 }

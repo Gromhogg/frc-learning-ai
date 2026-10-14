@@ -1,0 +1,42 @@
+# Another way to give the app its secrets on YOUR computer. Cloudflare's tools
+# read `.dev.vars` if it exists — and then they IGNORE `.env` completely.
+# So pick one: either copy .env.example to `.env` (simplest), or copy this
+# file to `.dev.vars`. Both are never committed to git.
+#
+# For the real app on Cloudflare, set each one with
+# `npx wrangler secret put NAME` instead (see the README).
+
+# Claude API key, from console.anthropic.com. Without it the bot can't answer.
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# A long random string used to sign people in. Anything long and secret works.
+JWT_SECRET=change-this-to-a-long-random-string
+
+# The admin password. Anyone who types it (with the Admin button) becomes an
+# admin. Admin access can't be removed in the app, so only share it with mentors.
+ADMIN_CODE=change-this-admin-password
+
+# The app's address on your computer (wrangler.jsonc has the real one).
+APP_URL=http://localhost:5173
+
+# The rest are optional. To turn one on, remove the # at the start of its line.
+
+# "Continue with Google". From Google Cloud > APIs & Services > Credentials.
+# GOOGLE_CLIENT_ID=your_google_client_id_here
+# GOOGLE_CLIENT_SECRET=your_google_client_secret_here
+
+# Team Gmail for the 6-digit signup codes. SMTP_PASS is a Gmail "app
+# password", not the normal password. Leave these out and the code is printed
+# in the terminal instead (fine for testing on your own computer).
+# SMTP_USER=your-team-account@gmail.com
+# SMTP_PASS=your-16-letter-app-password
+
+# Lets the bot search the web. From brave.com/search/api.
+# BRAVE_API_KEY=your_brave_api_key_here
+
+# Slack bot. From api.slack.com/apps > your app.
+# SLACK_BOT_TOKEN=xoxb-your-slack-bot-token
+# SLACK_SIGNING_SECRET=your_slack_signing_secret
+# Optional: who the picture search says it is to Wikimedia (a team website or
+# email). Defaults to the app address.
+# WIKIMEDIA_CONTACT=https://your-team-site.org

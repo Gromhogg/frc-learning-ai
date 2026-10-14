@@ -36,6 +36,20 @@
       "when": 1791856682983,
       "tag": "0004_round2",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1791862270992,
+      "tag": "0005_cloudflare",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791939958354,
+      "tag": "0006_api_keys",
+      "breakpoints": true
     }
   ]
 }

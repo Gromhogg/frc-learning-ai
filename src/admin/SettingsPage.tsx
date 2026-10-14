@@ -6,6 +6,8 @@ import { ApiError, errorMessage } from "../lib/api";
 import { cn } from "../lib/cn";
 import { Badge, Skeleton, Spinner } from "../components/ui/misc";
 import { PageHeader } from "./components/page-header";
+import { SlackSettingsCard } from "./components/slack-settings";
+import { TeamKeyCard } from "./components/team-key-card";
 
 const ROLES: { role: AgentRole; title: string; description: string }[] = [
   {
@@ -62,8 +64,12 @@ export default function SettingsPage() {
     <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Settings"
-        description="Pick which Claude model does each job. Cheaper models are faster and cost less; Opus is the smartest but costs the most."
+        description="The team's Claude key, and which model does each job. Cheaper models are faster and cost less; Opus is the smartest but costs the most."
       />
+
+      <div className="mb-4">
+        <TeamKeyCard />
+      </div>
 
       {data === null ? (
         <div className="flex flex-col gap-4">
@@ -123,6 +129,10 @@ export default function SettingsPage() {
           ))}
         </div>
       )}
+
+      <div className="mt-4">
+        <SlackSettingsCard />
+      </div>
     </div>
   );
 }

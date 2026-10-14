@@ -6,8 +6,9 @@ import { agentChats, agentMessages, conversations, messageFeedback, promptDrafts
 import { requireAdmin, type AdminEnv } from "../../lib/require-auth.ts";
 import { createPromptEditor } from "../../agents/prompt-editor.ts";
 import { describePromptStep } from "../../agents/prompt-tools.ts";
-import { historyToMessages, runAgentTurn, type ClientEvent } from "../../ai/run-agent.ts";
+import { historyToMessages, orderedSender, runAgentTurn } from "../../ai/run-agent.ts";
 import { modelFor } from "../../ai/models.ts";
+import { NO_KEY, apiKeyFor } from "../../ai/api-keys.ts";
 import { lastReview } from "../../agents/reviewer.ts";
 
 // Admin chats with the prompt-editor agent. Each admin sees only their own.
@@ -152,6 +153,9 @@ app.post("/:id/messages", async (c) => {
   const text = (raw ?? "").trim();
   if (!text) return c.json({ error: "Empty message." }, 400);
 
+  const apiKey = await apiKeyFor(adminId);
+  if (!apiKey.key) return c.json({ error: NO_KEY }, 503);
+
   const prior = await db
     .select()
     .from(agentMessages)
@@ -167,17 +171,18 @@ app.post("/:id/messages", async (c) => {
     await db.update(agentChats).set({ title }).where(eq(agentChats.id, chat.id));
   }
 
-  const agent = createPromptEditor({
-    history: historyToMessages(prior, modelFor("editor")),
+  const agent = await createPromptEditor({
+    history: historyToMessages(prior, await modelFor("editor")),
     adminId,
     chatId: chat.id,
+    apiKey: apiKey.key,
   });
 
   return streamSSE(c, async (stream) => {
     stream.onAbort(() => agent.abort());
-    const send = (event: ClientEvent) => void stream.writeSSE({ data: JSON.stringify(event) });
+    const { send, flushed } = orderedSender((data) => stream.writeSSE({ data }));
 
-    const result = await runAgentTurn(agent, { text }, send, describePromptStep);
+    const result = await runAgentTurn(agent, { text }, send, describePromptStep, { ownKey: apiKey.own });
 
     let messageId = 0;
     if (result.text || result.steps.length > 0) {
@@ -199,6 +204,7 @@ app.post("/:id/messages", async (c) => {
 
     if (result.error && result.error !== "Stopped.") send({ type: "error", message: result.error });
     send({ type: "done", messageId, userMessageId: userRow.id });
+    await flushed();
   });
 });
 

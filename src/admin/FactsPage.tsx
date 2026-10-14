@@ -59,7 +59,11 @@ function FactRow({
         )}
         <p className="mt-1 text-xs text-muted">
           {fact.mentionCount > 1 ? `Mentioned in ${fact.mentionCount} chats · ` : ""}
-          {fact.sourceUserName ? `from ${fact.sourceUserName}'s chat · ` : ""}
+          {fact.sourceLabel
+            ? `from ${fact.sourceLabel} · `
+            : fact.sourceUserName
+              ? `from ${fact.sourceUserName}'s chat · `
+              : ""}
           {timeAgo(fact.createdAt)}
         </p>
       </div>
@@ -122,7 +126,11 @@ function RemovedRow({ fact, onRestore }: { fact: Fact; onRestore: () => void }) 
         <p className="mt-1 text-xs text-muted">
           {fact.reviewedByName ? `Removed by ${fact.reviewedByName}` : "Removed"}
           {fact.reviewedAt ? ` ${timeAgo(fact.reviewedAt)}` : ""}
-          {fact.sourceUserName ? ` · from ${fact.sourceUserName}'s chat` : ""}
+          {fact.sourceLabel
+            ? ` · from ${fact.sourceLabel}`
+            : fact.sourceUserName
+              ? ` · from ${fact.sourceUserName}'s chat`
+              : ""}
         </p>
       </div>
       <Button variant="outline" size="sm" className="shrink-0" onClick={onRestore}>

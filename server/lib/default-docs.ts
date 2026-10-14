@@ -1,6 +1,6 @@
 // The reference docs a fresh install starts with. These are written into
-// DOCS_DIR once (see ensureDocsSeeded in docs.ts); after that the filesystem
-// is the source of truth and admins manage the files from the prompt page.
+// the file storage (R2) once (see ensureDocsSeeded in docs.ts); after that the
+// stored files are the source of truth and admins manage them from the prompt page.
 //
 // Each doc's first line is its title — it's what shows up in the doc index
 // the AI sees, so keep it short and descriptive.

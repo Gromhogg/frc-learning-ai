@@ -7,6 +7,7 @@ import { Markdown } from "../markdown";
 import { Button } from "../ui/button";
 import { Tooltip } from "../ui/tooltip";
 import { Logo } from "../ui/misc";
+import { ImageResults } from "./image-results";
 import { StepChip } from "./step-chip";
 
 export function UserMessage({ message }: { message: ChatMessage }) {
@@ -77,6 +78,8 @@ export function AssistantMessage({
         {message.text ? (
           <Markdown text={message.text} className={cn("text-[17px]", streaming && "caret")} />
         ) : null}
+
+        <ImageResults steps={message.steps} />
 
         {extras}
 

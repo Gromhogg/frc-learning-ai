@@ -6,7 +6,7 @@ import {
   isTextContent,
   listDocs,
   listTrash,
-  readDoc,
+  readDocWithMeta,
   restoreFromTrash,
   sanitizeDocName,
   statDoc,
@@ -20,17 +20,17 @@ const app = new Hono<AdminEnv>();
 app.use("*", requireAdmin);
 
 // GET / — every doc in the library
-app.get("/", (c) => c.json({ docs: listDocs() }));
+app.get("/", async (c) => c.json({ docs: await listDocs() }));
 
 // The trash routes come before "/:name" so "trash" is never read as a doc name.
 
 // GET /trash — deleted and replaced docs, newest first
-app.get("/trash", (c) => c.json({ trash: listTrash() }));
+app.get("/trash", async (c) => c.json({ trash: await listTrash() }));
 
 // POST /trash/:trashName/restore — move a doc back into the library. If its
 // old name is taken now, it comes back as "name-2.md" instead of replacing anything.
 app.post("/trash/:trashName/restore", async (c) => {
-  const restored = restoreFromTrash(c.req.param("trashName"));
+  const restored = await restoreFromTrash(c.req.param("trashName"));
   if (!restored) return c.json({ error: "That file isn't in the trash any more." }, 404);
 
   const { doc, originalName } = restored;
@@ -47,15 +47,14 @@ app.post("/trash/:trashName/restore", async (c) => {
 });
 
 // GET /:name — one doc with its full text, for previewing
-app.get("/:name", (c) => {
+app.get("/:name", async (c) => {
   const name = sanitizeDocName(c.req.param("name"));
   if (!name) return c.json({ error: "Invalid doc name." }, 400);
 
-  const doc = readDoc(name);
-  const meta = statDoc(name);
-  if (!doc || !meta) return c.json({ error: `No doc named "${name}".` }, 404);
+  const doc = await readDocWithMeta(name);
+  if (!doc) return c.json({ error: `No doc named "${name}".` }, 404);
 
-  return c.json({ ...meta, content: doc.content });
+  return c.json(doc);
 });
 
 // POST / — add one doc. One file per request so a name collision has an
@@ -74,7 +73,7 @@ app.post("/", async (c) => {
     return c.json({ error: `That file is too large (${Math.round(MAX_DOC_BYTES / 1024)} KB max).` }, 400);
   }
 
-  const bytes = Buffer.from(await file.arrayBuffer());
+  const bytes = new Uint8Array(await file.arrayBuffer());
   if (!isTextContent(bytes)) {
     return c.json({ error: "That file doesn't look like plain text." }, 400);
   }
@@ -84,8 +83,8 @@ app.post("/", async (c) => {
     return c.json({ error: "mode must be replace or keep-both." }, 400);
   }
 
-  const replacing = mode === "replace" && statDoc(name) !== null;
-  const result = writeDoc(name, bytes, mode ?? "create");
+  const replacing = mode === "replace" && (await statDoc(name)) !== null;
+  const result = await writeDoc(name, bytes, mode ?? "create");
   if (result.status === "conflict") {
     return c.json({ error: `A doc named "${name}" already exists.`, existing: result.existing }, 409);
   }
@@ -105,11 +104,11 @@ app.post("/", async (c) => {
   return c.json({ ok: true, doc: result.doc });
 });
 
-// DELETE /:name — moves the file into the trash folder, never destroys it
+// DELETE /:name — moves the file into the trash, never destroys it
 app.delete("/:name", async (c) => {
   const name = sanitizeDocName(c.req.param("name"));
   if (!name) return c.json({ error: "Invalid doc name." }, 400);
-  if (!trashDoc(name)) return c.json({ error: `No doc named "${name}".` }, 404);
+  if (!(await trashDoc(name))) return c.json({ error: `No doc named "${name}".` }, 404);
   await logEvent({
     actorId: c.get("adminId"),
     action: "doc.delete",

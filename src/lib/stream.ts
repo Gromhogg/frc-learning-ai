@@ -3,12 +3,21 @@ import { API_BASE, ApiError, getToken } from "./api";
 // Reads the server's streamed replies. The server sends Server-Sent Events:
 // lines of `data: {...json...}` separated by blank lines.
 
+/** A picture found by the tutor's picture search, shown under the answer. */
+export interface StepImage {
+  url: string;
+  pageUrl: string;
+  title: string;
+  credit: string;
+}
+
 export interface Step {
   id: string;
   tool: string;
   label: string;
   status: "running" | "done" | "error";
   draftId?: number;
+  images?: StepImage[];
 }
 
 export type StreamEvent =

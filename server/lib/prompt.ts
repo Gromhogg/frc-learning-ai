@@ -2,7 +2,7 @@ import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { promptVersions, settings, teamFacts, users } from "../../db/schema.ts";
 import { DEFAULT_SYSTEM_PROMPT } from "./default-prompt.ts";
-import { buildDocIndex, ensureDocsSeeded } from "./docs.ts";
+import { buildDocIndex } from "./docs.ts";
 import {
   assembleDoc,
   parseDoc,
@@ -205,9 +205,7 @@ export async function rollbackTo(
  * that this block deliberately doesn't print.
  */
 export async function buildSystemPrompt(): Promise<string> {
-  ensureDocsSeeded();
-  const base = await getBasePrompt();
-  const docIndex = buildDocIndex();
+  const [base, docIndex] = await Promise.all([getBasePrompt(), buildDocIndex()]);
   const facts = await db
     .select()
     .from(teamFacts)

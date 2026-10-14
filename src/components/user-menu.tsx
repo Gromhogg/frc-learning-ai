@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronsUpDown, LogOut, Monitor, Moon, Settings2, Sparkles, Sun } from "lucide-react";
+import { ChevronsUpDown, KeyRound, LogOut, Monitor, Moon, Settings2, Sparkles, Sun } from "lucide-react";
 import { useAuth } from "../auth/auth-context";
 import { useTheme, type ThemeChoice } from "../lib/theme";
 import { Avatar } from "./ui/misc";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "./ui/menu";
 import { InterestsDialog } from "./interests-dialog";
+import { ApiKeyDialog } from "./api-key-dialog";
 
 const THEMES: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { value: "light", label: "Light", icon: Sun },
@@ -13,12 +14,13 @@ const THEMES: { value: ThemeChoice; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "System", icon: Monitor },
 ];
 
-/** Avatar button at the bottom of the sidebar: theme, admin, sign out. */
+/** Avatar button at the bottom of the sidebar: theme, admin, interests, API key, sign out. */
 export function UserMenu({ compact = false }: { compact?: boolean }) {
   const { user, logout } = useAuth();
   const { choice, setChoice } = useTheme();
   const navigate = useNavigate();
   const [interestsOpen, setInterestsOpen] = useState(false);
+  const [keyOpen, setKeyOpen] = useState(false);
   if (!user) return null;
 
   return (
@@ -70,6 +72,9 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
           <MenuItem icon={<Sparkles />} onSelect={() => setInterestsOpen(true)}>
             Your interests
           </MenuItem>
+          <MenuItem icon={<KeyRound />} onSelect={() => setKeyOpen(true)}>
+            API key
+          </MenuItem>
           <MenuItem
             icon={<LogOut />}
             onSelect={() => {
@@ -82,6 +87,7 @@ export function UserMenu({ compact = false }: { compact?: boolean }) {
         </MenuContent>
       </Menu>
       <InterestsDialog open={interestsOpen} onOpenChange={setInterestsOpen} />
+      <ApiKeyDialog open={keyOpen} onOpenChange={setKeyOpen} />
     </>
   );
 }

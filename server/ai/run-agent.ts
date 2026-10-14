@@ -6,6 +6,17 @@ import type { AssistantMessage, ImageContent, Message } from "@mariozechner/pi-a
 // save. The browser reads these events as Server-Sent Events.
 
 /** One thing the agent did while answering, shown as a chip in the UI. */
+/** A picture found by the tutor's picture search, shown under the answer. */
+export interface StepImage {
+  /** The picture itself (a thumbnail-sized link). */
+  url: string;
+  /** The page the picture comes from (opened on click). */
+  pageUrl: string;
+  title: string;
+  /** Author / license / site, shown as a small credit line. */
+  credit: string;
+}
+
 export interface Step {
   id: string;
   tool: string;
@@ -13,6 +24,8 @@ export interface Step {
   status: "running" | "done" | "error";
   /** Set when the step created a prompt draft (editor and reviewer agents). */
   draftId?: number;
+  /** Set when the step found pictures (the tutor's find_images tool). */
+  images?: StepImage[];
 }
 
 export type ClientEvent =
@@ -26,6 +39,19 @@ export interface RunResult {
   text: string;
   steps: Step[];
   error: string | null;
+}
+
+/**
+ * Send stream events in order, and let the caller wait until every one has
+ * actually gone out. Cloudflare closes the stream as soon as the handler
+ * returns, so un-awaited writes (like the final "done") would be lost.
+ */
+export function orderedSender(write: (data: string) => Promise<void>) {
+  let chain = Promise.resolve();
+  const send = (event: ClientEvent) => {
+    chain = chain.then(() => write(JSON.stringify(event))).catch(() => {});
+  };
+  return { send, flushed: () => chain };
 }
 
 /** How a tool call looks in the UI, e.g. read_doc → "Reading vertical-mill.md". */
@@ -43,6 +69,8 @@ export async function runAgentTurn(
   input: { text: string; images?: ImageContent[] },
   send: (event: ClientEvent) => void,
   describe: DescribeStep,
+  /** `ownKey`: the turn runs on the person's own API key (changes the error hints). */
+  opts: { ownKey?: boolean } = {},
 ): Promise<RunResult> {
   const parts: string[] = [];
   const steps = new Map<string, Step>();
@@ -70,7 +98,7 @@ export async function runAgentTurn(
         if (current.trim()) parts.push(current.trim());
         current = "";
         if (m.stopReason === "error" || m.stopReason === "aborted") {
-          error = friendlyError(m);
+          error = friendlyError(m, opts.ownKey ?? false);
         }
         break;
       }
@@ -89,8 +117,9 @@ export async function runAgentTurn(
         const step = steps.get(event.toolCallId);
         if (!step) break;
         step.status = event.isError ? "error" : "done";
-        const draftId = (event.result?.details as { draftId?: number } | undefined)?.draftId;
-        if (draftId) step.draftId = draftId;
+        const details = event.result?.details as { draftId?: number; images?: StepImage[] } | undefined;
+        if (details?.draftId) step.draftId = details.draftId;
+        if (details?.images?.length) step.images = details.images;
         send({ type: "step", step: { ...step } });
         break;
       }
@@ -113,10 +142,20 @@ export async function runAgentTurn(
   return { text: parts.join("\n\n"), steps: [...steps.values()], error };
 }
 
-function friendlyError(m: AssistantMessage): string {
+function friendlyError(m: AssistantMessage, ownKey: boolean): string {
   if (m.stopReason === "aborted") return "Stopped.";
   const raw = m.errorMessage ?? "";
   if (!raw) return "The AI declined to answer that one. Try asking another way.";
+  if (/authentication_error|invalid x-api-key|no api key|\b401\b/i.test(raw)) {
+    return ownKey
+      ? "Your API key didn't work. Check it, or switch back to the team key under API key in the menu."
+      : "The team's AI key isn't working. Let an admin know, or add your own key under API key in the menu.";
+  }
+  if (/credit balance/i.test(raw)) {
+    return ownKey
+      ? "Your API key is out of credit. Add credit in the Claude Console, or switch back to the team key under API key in the menu."
+      : "The team's AI key is out of credit. Let an admin know, or add your own key under API key in the menu.";
+  }
   if (/rate.?limit|429|overloaded|529/i.test(raw)) {
     return "The AI is busy right now. Wait a moment and try again.";
   }

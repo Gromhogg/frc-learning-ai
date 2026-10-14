@@ -7,7 +7,6 @@ import {
   LEARN_IDLE_MINUTES,
   LEARN_MAX_CALLS_PER_USER_DAY,
   LEARN_MAX_EXCHANGES_PER_BATCH,
-  LEARN_SWEEP_INTERVAL_MS,
 } from "./config.ts";
 import {
   insertPendingFact,
@@ -16,14 +15,17 @@ import {
   trimQueues,
 } from "./facts.ts";
 import { recordInterests } from "./interests.ts";
+// Renamed here only because the React lint rule treats any "use…" name as a React hook.
+import { countToday, today, useDailyAllowance as takeDailyAllowance } from "./limits.ts";
 import { modelFor } from "../ai/models.ts";
+import { teamApiKey } from "../ai/api-keys.ts";
 
 // Background fact learning, one batch per conversation instead of one LLM
-// call per message. The chat route just calls noteExchange() — O(1), sync —
-// and a sweep timer picks conversations up once they go quiet (or pile up a
-// full batch mid-session). The durable watermark on the conversation row
-// (learned_through_message_id) means a restart never re-learns a batch and a
-// startup catch-up sweep finds whatever a crash orphaned.
+// call per message. A timed job runs runLearnSweep() every 5 minutes; it asks
+// the database which conversations went quiet (or piled up a full batch
+// mid-session) and learns from each. The watermark on the conversation row
+// (learned_through_message_id) means a batch is never learned twice, and
+// nothing is lost if a server copy stops in the middle.
 //
 // Extracted facts do NOT go into the prompt: they land in the pending queue
 // for an admin to approve (see facts.ts). Reinforcements of existing facts
@@ -106,96 +108,53 @@ export interface Extraction {
   student_interests?: { topics: string[]; stated_focus: string };
 }
 
-// Conversations with activity the learner hasn't looked at yet. Purely a
-// wake-up list — the truth about WHAT is unlearned lives in the watermark.
-const activity = new Map<number, { lastActivityMs: number; count: number }>();
-
-/** The chat route calls this after each finished exchange. Never blocks. */
-export function noteExchange(conversationId: number): void {
-  const entry = activity.get(conversationId);
-  activity.set(conversationId, {
-    lastActivityMs: Date.now(),
-    count: (entry?.count ?? 0) + 1,
-  });
-}
-
-// ─── daily spend brakes ────────────────────────────────────────────────────
-
-let spend = { day: "", total: 0, byUser: new Map<number, number>() };
-
-function underCaps(userId: number): boolean {
-  const day = new Date().toDateString();
-  if (spend.day !== day) spend = { day, total: 0, byUser: new Map() };
-  if (spend.total >= LEARN_DAILY_CALL_CAP) return false;
-  return (spend.byUser.get(userId) ?? 0) < LEARN_MAX_CALLS_PER_USER_DAY;
-}
-
-function recordCall(userId: number): void {
-  spend.total += 1;
-  spend.byUser.set(userId, (spend.byUser.get(userId) ?? 0) + 1);
-}
-
 // ─── the sweep ─────────────────────────────────────────────────────────────
 
-let sweeping = false;
+/** Most conversations learned from in one sweep (the sweep runs every 5 minutes). */
+const SWEEP_MAX_CONVERSATIONS = 10;
 
 /**
- * Start the background learner: catch up on batches a crash or restart left
- * behind, then sweep for quiet conversations every LEARN_SWEEP_INTERVAL_MS.
- * Call once from server startup.
+ * Learn from conversations that are ready: their messages go past the
+ * watermark, AND they've been quiet for LEARN_IDLE_MINUTES or piled up a full
+ * batch mid-session. Called by the 5-minute timed job (server/jobs.ts).
+ * Everything it needs is in the database, so no server copy has to remember
+ * anything between runs. Returns how many conversations it learned from.
  */
-export function startLearnScheduler(): void {
-  void catchUp().catch((err) => console.error("Learn catch-up failed:", err));
-  setInterval(() => void sweep(), LEARN_SWEEP_INTERVAL_MS).unref();
-}
+export async function runLearnSweep(): Promise<number> {
+  if (!(await teamApiKey())) return 0;
+  if ((await countToday("learn:total")) >= LEARN_DAILY_CALL_CAP) return 0;
 
-/**
- * Seed the wake-up list with every conversation whose messages ran past its
- * watermark — work that was noted in a previous process's memory and lost.
- * Idle timing comes from the last message's DB timestamp, not
- * conversations.updatedAt, which mixes two timestamp formats.
- */
-async function catchUp(): Promise<void> {
-  const rows = await db.all<{ id: number; last_created_at: string | null; unlearned: number }>(sql`
-    SELECT c.id AS id, MAX(m.created_at) AS last_created_at, COUNT(m.id) AS unlearned
+  // Message times are SQLite "YYYY-MM-DD HH:MM:SS" (UTC), so plain text
+  // comparison works. People who hit their own daily cap are left out, so
+  // their chats wait for tomorrow without blocking anyone else's.
+  const idleCutoff = new Date(Date.now() - LEARN_IDLE_MINUTES * 60_000)
+    .toISOString()
+    .slice(0, 19)
+    .replace("T", " ");
+  const rows = await db.all<{ id: number }>(sql`
+    SELECT c.id AS id
     FROM conversations c
     JOIN messages m ON m.conversation_id = c.id AND m.id > c.learned_through_message_id
+    WHERE NOT EXISTS (
+      SELECT 1 FROM usage_counters u
+      WHERE u.key = 'learn:user:' || c.user_id AND u.day = ${today()}
+        AND u.count >= ${LEARN_MAX_CALLS_PER_USER_DAY}
+    )
     GROUP BY c.id
+    HAVING MAX(m.created_at) <= ${idleCutoff} OR COUNT(m.id) >= ${LEARN_MAX_EXCHANGES_PER_BATCH * 2}
+    ORDER BY MIN(m.id)
+    LIMIT ${SWEEP_MAX_CONVERSATIONS}
   `);
-  for (const row of rows) {
-    if (activity.has(row.id)) continue;
-    // SQLite CURRENT_TIMESTAMP is "YYYY-MM-DD HH:MM:SS" in UTC, no marker.
-    const parsed = row.last_created_at
-      ? new Date(`${row.last_created_at.replace(" ", "T")}Z`).getTime()
-      : NaN;
-    activity.set(row.id, {
-      lastActivityMs: Number.isNaN(parsed) ? Date.now() : parsed,
-      count: row.unlearned,
-    });
-  }
-  if (rows.length > 0) {
-    console.log(`Learn catch-up: ${rows.length} conversation(s) with unlearned messages.`);
-  }
-}
 
-async function sweep(): Promise<void> {
-  if (sweeping) return;
-  sweeping = true;
-  try {
-    const idleCutoff = Date.now() - LEARN_IDLE_MINUTES * 60_000;
-    const due = [...activity.entries()].filter(
-      ([, entry]) =>
-        entry.lastActivityMs <= idleCutoff || entry.count >= LEARN_MAX_EXCHANGES_PER_BATCH,
-    );
-    // One at a time — extraction is background work and should never compete
-    // with live chats for the API.
-    for (const [conversationId] of due) {
-      activity.delete(conversationId);
-      await learnFromConversation(conversationId);
-    }
-  } finally {
-    sweeping = false;
+  // One at a time — extraction is background work and should never compete
+  // with live chats for the API.
+  let learned = 0;
+  for (const row of rows) {
+    const outcome = await learnFromConversation(row.id);
+    if (outcome === "learned") learned += 1;
+    if (outcome === "daily-cap") break;
   }
+  return learned;
 }
 
 /**
@@ -207,19 +166,28 @@ async function sweep(): Promise<void> {
  * than perfect recall, and a missed fact is not worth a broken chat. Every
  * failure is swallowed and logged for the same reason.
  */
-export async function learnFromConversation(conversationId: number): Promise<void> {
+export async function learnFromConversation(
+  conversationId: number,
+): Promise<"learned" | "skipped" | "daily-cap"> {
   try {
-    if (!process.env.ANTHROPIC_API_KEY) return;
+    if (!(await teamApiKey())) return "skipped";
 
     const [conversation] = await db
       .select()
       .from(conversations)
       .where(eq(conversations.id, conversationId));
-    if (!conversation) return;
+    if (!conversation) return "skipped";
 
-    if (!underCaps(conversation.userId)) {
-      console.log(`Learn: skipping conversation ${conversationId} — daily extraction cap reached.`);
-      return;
+    // Daily spending brakes, kept in the database (see limits.ts). The
+    // watermark doesn't move when capped, so these messages are learned
+    // tomorrow instead.
+    if (!(await takeDailyAllowance(`learn:user:${conversation.userId}`, LEARN_MAX_CALLS_PER_USER_DAY))) {
+      console.log(`Learn: skipping conversation ${conversationId} — this person's daily cap is reached.`);
+      return "skipped";
+    }
+    if (!(await takeDailyAllowance("learn:total", LEARN_DAILY_CALL_CAP))) {
+      console.log(`Learn: skipping conversation ${conversationId} — the daily cap is reached.`);
+      return "daily-cap";
     }
 
     const unlearned = await db
@@ -232,7 +200,7 @@ export async function learnFromConversation(conversationId: number): Promise<voi
         ),
       )
       .orderBy(asc(messages.id));
-    if (unlearned.length === 0) return;
+    if (unlearned.length === 0) return "skipped";
 
     // A monster session still costs one bounded call: only the most recent
     // batch is read, and the watermark skips past the rest.
@@ -256,11 +224,10 @@ export async function learnFromConversation(conversationId: number): Promise<voi
       })
       .join("\n\n");
 
-    recordCall(conversation.userId);
     const result = await runExtraction(existingList, transcript);
     if (!result.ok) {
       console.error(`Learn: extraction for conversation ${conversationId} failed: ${result.error}`);
-      return;
+      return "skipped";
     }
 
     const knownIds = new Set(existing.map((f) => f.id));
@@ -294,8 +261,10 @@ export async function learnFromConversation(conversationId: number): Promise<voi
     } catch (err) {
       console.error(`Learn: saving interests for conversation ${conversationId} failed:`, err);
     }
+    return "learned";
   } catch (err) {
     console.error(`learnFromConversation(${conversationId}) failed (chats unaffected):`, err);
+    return "skipped";
   }
 }
 
@@ -309,7 +278,7 @@ export async function runExtraction(
   transcript: string,
 ): Promise<{ ok: true; extraction: Extraction } | { ok: false; error: string }> {
   const reply = await completeSimple(
-    modelFor("learn"),
+    await modelFor("learn"),
     {
       systemPrompt: EXTRACT_INSTRUCTIONS,
       messages: [
@@ -321,6 +290,7 @@ export async function runExtraction(
       ],
     },
     {
+      apiKey: await teamApiKey(),
       onPayload: (payload) => ({
         ...(payload as object),
         max_tokens: 2_000,

@@ -1,9 +1,4 @@
-import "./lib/env.ts"; // Load .env before anything else
 import { Hono } from "hono";
-import { cors } from "hono/cors";
-import { serve } from "@hono/node-server";
-import { serveStatic } from "@hono/node-server/serve-static";
-import { runMigrations } from "../db/index.ts";
 import authRouter from "./routes/auth.ts";
 import chatRouter from "./routes/chat.ts";
 import conversationsRouter from "./routes/conversations.ts";
@@ -19,33 +14,33 @@ import adminReviewRouter from "./routes/admin/review.ts";
 import adminAdminsRouter from "./routes/admin/admins.ts";
 import adminSettingsRouter from "./routes/admin/settings.ts";
 import adminEventsRouter from "./routes/admin/events.ts";
-import { FRONTEND_URL, SERVER_PORT } from "./lib/config.ts";
+import adminSlackRouter from "./routes/admin/slack.ts";
+import slackRouter from "./routes/slack.ts";
 import { ensureDocsMigrated } from "./lib/docs-migration.ts";
 import { ensurePromptSectionsMigrated } from "./lib/prompt-sections-migration.ts";
-import { startLearnScheduler } from "./lib/learn.ts";
-import { startReviewScheduler } from "./agents/reviewer.ts";
 
-// Bring the database schema up to date before anything reads it.
-runMigrations();
-
+// The whole server: every route the app uses. Runs on Cloudflare Workers (see
+// worker.ts). The React app and the API share one address, so no CORS setup.
 const app = new Hono();
 
-// Allow the Vite dev server to call us.
-app.use(
-  "*",
-  cors({
-    origin: [FRONTEND_URL, FRONTEND_URL.replace("localhost", "127.0.0.1")],
-    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  }),
-);
-
-// Photos students upload, served straight off disk.
-app.use("/uploads/*", serveStatic({ root: "./data" }));
+// One-time data upgrades (flag-guarded, so cheap after the first time): move
+// the old inline shop reference into the docs library, then split the
+// instructions into editable sections. Run once per server copy, before the
+// first request is handled. Never fatal — each logs and retries next time.
+let upgrades: Promise<void> | null = null;
+app.use("*", async (_c, next) => {
+  upgrades ??= (async () => {
+    await ensureDocsMigrated();
+    await ensurePromptSectionsMigrated();
+  })();
+  await upgrades;
+  await next();
+});
 
 // Everyone signed in
 app.route("/auth", authRouter);
+app.route("/uploads", uploadsRouter);
+app.route("/slack", slackRouter);
 app.route("/api/chat", chatRouter);
 app.route("/api/conversations", conversationsRouter);
 app.route("/api/uploads", uploadsRouter);
@@ -62,21 +57,6 @@ app.route("/api/admin/review", adminReviewRouter);
 app.route("/api/admin/admins", adminAdminsRouter);
 app.route("/api/admin/settings", adminSettingsRouter);
 app.route("/api/admin/events", adminEventsRouter);
+app.route("/api/admin/slack", adminSlackRouter);
 
-// One-time move of the old inline shop reference into the docs library,
-// then the one-time split of the instructions into editable sections — in
-// that order, since the docs migration may rewrite the prompt head first.
-// Never fatal — each logs and retries on the next start if something breaks.
-await ensureDocsMigrated();
-await ensurePromptSectionsMigrated();
-
-// Background work: fact extraction from quiet chats, and the daily review
-// that drafts prompt improvements for admins to approve.
-startLearnScheduler();
-startReviewScheduler();
-
-serve({ fetch: app.fetch, port: SERVER_PORT }, (info) => {
-  console.log(`Server running at http://localhost:${info.port}`);
-});
-
-export type AppType = typeof app;
+export default app;

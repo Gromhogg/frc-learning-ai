@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import { Hono, type Context } from "hono";
-import { getCookie, setCookie } from "hono/cookie";
+import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { Google, generateState, generateCodeVerifier } from "arctic";
 import bcrypt from "bcryptjs";
 import { and, eq, lt, sql } from "drizzle-orm";
@@ -11,7 +11,8 @@ import { getAuth } from "../lib/require-auth.ts";
 import { logEvent } from "../lib/events.ts";
 import { sendCodeEmail } from "../lib/email.ts";
 import { emailDomain, isSchoolEmail, SCHOOL_EMAIL_ERROR } from "../lib/school-email.ts";
-import { FRONTEND_URL, SERVER_PORT } from "../lib/config.ts";
+import { APP_URL } from "../lib/config.ts";
+import { clearAttempts, takeAttempt } from "../lib/limits.ts";
 
 const app = new Hono();
 
@@ -23,13 +24,15 @@ const CODE_TTL_MS = 10 * 60_000; // a signup code works for 10 minutes
 const RESEND_WAIT_SECONDS = 60; // one email per minute
 const MAX_SENDS_PER_HOUR = 5; // per email address
 const MAX_CODE_TRIES = 5; // wrong guesses allowed per code
-const MAX_ADMIN_TRIES = 5; // wrong admin passwords per person...
-const ADMIN_TRIES_WINDOW_MS = 15 * 60_000; // ...per 15 minutes
+const MAX_ADMIN_TRIES = 5; // wrong admin passwords per person per 15 minutes
+const MAX_LOGIN_TRIES = 10; // wrong passwords per account per 15 minutes
+const TRIES_WINDOW_MS = 15 * 60_000;
 
 const ALREADY_EXISTS = "An account with that email already exists. Sign in instead.";
 const TOO_MANY_CODES = "Too many wrong codes. Ask for a new one.";
 const NO_SIGNUP = "No signup is waiting for that email. Go back and start again.";
 const START_AGAIN = "This code doesn't work any more. Go back and start again.";
+const TOO_MANY_TRIES = "Too many tries. Wait 15 minutes and try again.";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -122,13 +125,24 @@ function isUniqueError(err: unknown): boolean {
   return err instanceof Error && /UNIQUE/i.test(err.message);
 }
 
-function getGoogle() {
-  return new Google(
-    process.env.GOOGLE_CLIENT_ID!,
-    process.env.GOOGLE_CLIENT_SECRET!,
-    `http://localhost:${SERVER_PORT}/auth/google/callback`,
-  );
+/** Google sign-in, or null if GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET aren't set. */
+function getGoogle(): Google | null {
+  const id = process.env.GOOGLE_CLIENT_ID;
+  const secret = process.env.GOOGLE_CLIENT_SECRET;
+  if (!id || !secret) return null;
+  // This exact address must be listed in Google Cloud ("Authorized redirect URIs").
+  return new Google(id, secret, `${APP_URL}/auth/google/callback`);
 }
+
+// The two short-lived cookies that tie Google's reply to this browser.
+// Secure (https only) once the app runs on its real https address.
+const oauthCookie = {
+  httpOnly: true,
+  path: "/",
+  maxAge: 600,
+  sameSite: "Lax",
+  secure: APP_URL.startsWith("https://"),
+} as const;
 
 // ── Google sign-in ───────────────────────────────────────────────────────────
 
@@ -138,18 +152,23 @@ function getGoogle() {
 app.get("/google", (c) => {
   const email = normalizeEmail(c.req.query("email"));
   if (!isSchoolEmail(email)) {
-    return c.redirect(`${FRONTEND_URL}/login?error=school_email`);
+    return c.redirect(`${APP_URL}/login?error=school_email`);
+  }
+  const google = getGoogle();
+  if (!google) {
+    console.error("Google sign-in isn't set up: add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET.");
+    return c.redirect(`${APP_URL}/login?error=oauth_failed`);
   }
 
   const state = generateState();
   const codeVerifier = generateCodeVerifier();
-  const url = getGoogle().createAuthorizationURL(state, codeVerifier, ["openid", "email", "profile"]);
+  const url = google.createAuthorizationURL(state, codeVerifier, ["openid", "email", "profile"]);
   url.searchParams.set("prompt", "select_account");
   url.searchParams.set("login_hint", email);
   url.searchParams.set("hd", emailDomain(email));
 
-  setCookie(c, "google_oauth_state", state, { httpOnly: true, path: "/", maxAge: 600, sameSite: "Lax" });
-  setCookie(c, "google_code_verifier", codeVerifier, { httpOnly: true, path: "/", maxAge: 600, sameSite: "Lax" });
+  setCookie(c, "google_oauth_state", state, oauthCookie);
+  setCookie(c, "google_code_verifier", codeVerifier, oauthCookie);
 
   return c.redirect(url.toString());
 });
@@ -158,13 +177,17 @@ app.get("/google/callback", async (c) => {
   const { code, state } = c.req.query();
   const storedState = getCookie(c, "google_oauth_state");
   const codeVerifier = getCookie(c, "google_code_verifier");
+  // Each pair is used once.
+  deleteCookie(c, "google_oauth_state", { path: "/", secure: oauthCookie.secure });
+  deleteCookie(c, "google_code_verifier", { path: "/", secure: oauthCookie.secure });
 
-  if (!code || !state || state !== storedState || !codeVerifier) {
-    return c.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
+  const google = getGoogle();
+  if (!google || !code || !state || state !== storedState || !codeVerifier) {
+    return c.redirect(`${APP_URL}/login?error=oauth_failed`);
   }
 
   try {
-    const tokens = await getGoogle().validateAuthorizationCode(code, codeVerifier);
+    const tokens = await google.validateAuthorizationCode(code, codeVerifier);
     const res = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
       headers: { Authorization: `Bearer ${tokens.accessToken()}` },
     });
@@ -180,7 +203,7 @@ app.get("/google/callback", async (c) => {
     // The hd= hint above only steers the picker; the real check is here.
     const email = normalizeEmail(info.email);
     if (info.email_verified !== true || !isSchoolEmail(email)) {
-      return c.redirect(`${FRONTEND_URL}/login?error=school_email`);
+      return c.redirect(`${APP_URL}/login?error=school_email`);
     }
 
     const googleId = info.sub;
@@ -210,10 +233,10 @@ app.get("/google/callback", async (c) => {
     }
 
     const token = await signToken({ userId: user.id, role: user.role });
-    return c.redirect(`${FRONTEND_URL}/auth/callback?token=${token}`);
+    return c.redirect(`${APP_URL}/auth/callback?token=${token}`);
   } catch (err) {
     console.error("OAuth callback error:", err);
-    return c.redirect(`${FRONTEND_URL}/login?error=oauth_failed`);
+    return c.redirect(`${APP_URL}/login?error=oauth_failed`);
   }
 });
 
@@ -262,9 +285,16 @@ app.post("/login", async (c) => {
   if (!user.passwordHash) {
     return c.json({ error: "This account uses Google sign-in. Use Continue with Google." }, 400);
   }
+
+  // Count every try against this account (kept in the database, so it holds
+  // across all copies of the server). A right password clears the count.
+  const triesKey = `login:${user.id}`;
+  const tries = await takeAttempt(triesKey, MAX_LOGIN_TRIES, TRIES_WINDOW_MS);
+  if (!tries.allowed) return c.json({ error: TOO_MANY_TRIES }, 429);
   if (!(await bcrypt.compare(password, user.passwordHash))) {
     return c.json({ error: "Incorrect password." }, 401);
   }
+  await clearAttempts(triesKey);
 
   const token = await signToken({ userId: user.id, role: user.role });
   return c.json({ token, user: safeUser(user) });
@@ -478,10 +508,7 @@ app.post("/register/verify", async (c) => {
 // Entering the admin password is the ONLY way to become an admin, and there
 // is deliberately no way to remove admin access in the app.
 
-// Wrong tries per person, kept in memory (a restart clears them).
-const adminTries = new Map<number, { count: number; since: number }>();
-
-/** ADMIN_CODE in .env. TEACHER_CODE is the old name — still read so old .env files work. */
+/** The ADMIN_CODE secret. TEACHER_CODE is the old name — still read so old .env files work. */
 function adminPassword(): string {
   return (process.env.ADMIN_CODE || process.env.TEACHER_CODE || "").trim();
 }
@@ -499,29 +526,26 @@ app.post("/admin-code", async (c) => {
     return c.json({ token, user: safeUser(current) });
   }
 
-  const now = Date.now();
-  let tries = adminTries.get(current.id);
-  if (tries && now - tries.since > ADMIN_TRIES_WINDOW_MS) {
-    adminTries.delete(current.id);
-    tries = undefined;
-  }
-  if (tries && tries.count >= MAX_ADMIN_TRIES) {
-    return c.json({ error: "Too many tries. Wait 15 minutes and try again." }, 429);
-  }
-
   const expected = adminPassword();
   if (!expected) {
-    return c.json({ error: "The admin password isn't set up yet. Add ADMIN_CODE to the server's .env file." }, 400);
+    return c.json(
+      { error: "The admin password isn't set up yet. Add the ADMIN_CODE secret (see the README)." },
+      400,
+    );
   }
+
+  // Count every try for this person (kept in the database, so it holds across
+  // all copies of the server). The right password clears the count.
+  const triesKey = `admin-code:${current.id}`;
+  const tries = await takeAttempt(triesKey, MAX_ADMIN_TRIES, TRIES_WINDOW_MS);
+  if (!tries.allowed) return c.json({ error: TOO_MANY_TRIES }, 429);
 
   const typed = str((await readBody(c)).code).trim();
   if (!typed || !sameSecret(typed, expected)) {
-    if (tries) tries.count += 1;
-    else adminTries.set(current.id, { count: 1, since: now });
     return c.json({ error: "That password isn't right." }, 400);
   }
 
-  adminTries.delete(current.id);
+  await clearAttempts(triesKey);
   const [user] = await db
     .update(users)
     .set({ role: "admin", adminSince: sql`coalesce(${users.adminSince}, CURRENT_TIMESTAMP)` })
