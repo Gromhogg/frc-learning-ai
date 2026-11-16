@@ -219,7 +219,7 @@ export default function FactsPage() {
     <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Team facts"
-        description="Things the AI picked up about your team from student chats — like which motors you use or what you call the router. Approved facts are added to every chat. Rejected ones are never suggested again, unless you restore them."
+        description="Things the AI picked up about your team from student chats."
       />
 
       <div className="mb-4 inline-flex max-w-full overflow-x-auto rounded-xl bg-surface-2 p-1">

@@ -358,7 +358,7 @@ export default function PromptPage() {
             {live ? <Badge>v{live.version}</Badge> : null}
           </div>
           <p className="mt-1 max-w-2xl text-sm text-muted">
-            What the AI is told before every chat. Sections are joined top to bottom; switched-off ones are skipped.
+            What the AI is told before every chat.
             {live ? (
               <span className="text-faint">
                 {" "}
