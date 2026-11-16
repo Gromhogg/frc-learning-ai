@@ -39,11 +39,8 @@ export default function AdminLayout() {
       {/* Side menu (top bar on phones) */}
       <aside className="flex shrink-0 flex-col border-b border-line bg-surface md:w-60 md:border-r md:border-b-0">
         <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
-          <Logo size={26} />
-          <div className="min-w-0">
-            <p className="text-[15px] leading-tight font-semibold tracking-tight">Admin</p>
-            <p className="text-xs text-muted">972 Chat Bot</p>
-          </div>
+          <Logo size={34} />
+          <p className="text-[15px] font-semibold tracking-tight">Admin</p>
         </div>
         <Link
           to="/"
@@ -95,6 +92,22 @@ export default function AdminLayout() {
       </aside>
 
       <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+        <div className="flex justify-end px-4 pt-3 md:px-6">
+          <button
+            type="button"
+            onClick={assistant.toggle}
+            aria-pressed={assistant.open}
+            className={cn(
+              "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[13px] font-medium transition-colors",
+              assistant.open
+                ? "border-accent-line bg-accent-soft text-accent-text"
+                : "border-line bg-surface text-fg hover:bg-surface-2",
+            )}
+          >
+            <Wand2 className="size-4" />
+            Prompt assistant
+          </button>
+        </div>
         <Outlet context={{ counts, refreshCounts, appliedCount }} />
       </main>
 

@@ -3,6 +3,7 @@ import authRouter from "./routes/auth.ts";
 import chatRouter from "./routes/chat.ts";
 import conversationsRouter from "./routes/conversations.ts";
 import uploadsRouter from "./routes/uploads.ts";
+import transcribeRouter from "./routes/transcribe.ts";
 import suggestionsRouter from "./routes/suggestions.ts";
 import meRouter from "./routes/me.ts";
 import adminPromptRouter from "./routes/admin/prompt.ts";
@@ -44,6 +45,7 @@ app.route("/slack", slackRouter);
 app.route("/api/chat", chatRouter);
 app.route("/api/conversations", conversationsRouter);
 app.route("/api/uploads", uploadsRouter);
+app.route("/api/transcribe", transcribeRouter);
 app.route("/api/suggestions", suggestionsRouter);
 app.route("/api/me", meRouter);
 

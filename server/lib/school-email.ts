@@ -5,7 +5,7 @@
 // The login page has its own copy of this list (src/pages/Login.tsx) so it
 // can warn right away. Change both together.
 
-export const SCHOOL_DOMAINS = ["lghsstudent.org", "lghsuhsd.org"];
+export const SCHOOL_DOMAINS = ["lgsstudent.org", "lgsuhsd.org"];
 
 export const SCHOOL_EMAIL_ERROR = "Please input your school email";
 

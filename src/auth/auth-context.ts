@@ -6,6 +6,8 @@ export interface AuthUser {
   email: string | null;
   avatarUrl?: string | null;
   role: "student" | "admin";
+  /** The owner can change the admin password and make or remove admins. */
+  owner?: boolean;
 }
 
 export interface AuthContextType {

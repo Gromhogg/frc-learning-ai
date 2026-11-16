@@ -21,6 +21,8 @@ export interface Interest {
   /** The last few distinct conversation ids this topic came up in. */
   chats: number[];
   lastSeen: string;
+  /** The person named it themself in "Your interests": always strong, never fades. */
+  stated?: boolean;
 }
 
 export type Profile = typeof userProfiles.$inferSelect;
@@ -53,7 +55,7 @@ function matchesFocus(topic: string, focus: string | null): boolean {
 }
 
 function isStrong(interest: Interest, focus: string | null): boolean {
-  return interest.chats.length >= STRONG_MIN_CHATS || matchesFocus(interest.topic, focus);
+  return !!interest.stated || interest.chats.length >= STRONG_MIN_CHATS || matchesFocus(interest.topic, focus);
 }
 
 /** Read the interests JSON, skipping anything that doesn't look right. */
@@ -130,7 +132,7 @@ export async function recordInterests(
   const before = signalKey(profile);
   const now = new Date().toISOString();
 
-  const list = parseInterests(profile.interests).map((i) => ({ ...i, score: i.score * FADE }));
+  const list = parseInterests(profile.interests).map((i) => (i.stated ? i : { ...i, score: i.score * FADE }));
   for (const topic of cleanTopics) {
     const found = list.find((i) => i.topic === topic);
     if (found) {
@@ -162,17 +164,48 @@ export async function recordInterests(
     .where(eq(userProfiles.userId, userId));
 }
 
-/** What the person can see about themself: topics (strong ones flagged) and their stated focus. */
+/**
+ * Save what the person wrote about themself (already turned into topics by
+ * the AI). Their own topics replace the ones they named before; topics
+ * learned from chats stay.
+ */
+export async function saveDescribedInterests(
+  userId: number,
+  described: { topics: string[]; focus: string; about: string },
+): Promise<void> {
+  const profile = await getProfile(userId);
+  const now = new Date().toISOString();
+  const topics = [...new Set(described.topics.map(normalizeTopic))].filter(Boolean).slice(0, MAX_TOPICS);
+  const stated: Interest[] = topics.map((topic) => ({ topic, score: 3, chats: [], lastSeen: now, stated: true }));
+  const learned = parseInterests(profile.interests).filter((i) => !i.stated && !topics.includes(i.topic));
+  const focus = normalizeTopic(described.focus) || null;
+  const about = described.about.trim().slice(0, 160) || null;
+
+  await db
+    .update(userProfiles)
+    .set({
+      interests: JSON.stringify([...stated, ...learned].slice(0, MAX_TOPICS)),
+      statedFocus: focus,
+      about,
+      suggestionsDirty: true,
+      updatedAt: now,
+    })
+    .where(eq(userProfiles.userId, userId));
+}
+
+/** What the person can see about themself: topics (strong ones flagged), their stated focus, and the line about them. */
 export async function getInterests(userId: number): Promise<{
   topics: { topic: string; strong: boolean }[];
   statedFocus: string | null;
+  about: string | null;
 }> {
   const profile = await findProfile(userId);
-  if (!profile) return { topics: [], statedFocus: null };
+  if (!profile) return { topics: [], statedFocus: null, about: null };
   const focus = profile.statedFocus || null;
   return {
     topics: parseInterests(profile.interests).map((i) => ({ topic: i.topic, strong: isStrong(i, focus) })),
     statedFocus: focus,
+    about: profile.about || null,
   };
 }
 
@@ -183,6 +216,7 @@ export async function clearInterests(userId: number): Promise<void> {
     .set({
       interests: "[]",
       statedFocus: null,
+      about: null,
       suggestions: "[]",
       suggestionsGeneratedAt: null,
       suggestionsDirty: true,

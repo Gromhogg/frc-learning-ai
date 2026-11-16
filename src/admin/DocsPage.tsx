@@ -103,7 +103,7 @@ export default function DocsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Reference docs"
         description="Machine procedures, specs, and team guides the AI can open while answering. Plain text or Markdown files, up to 100 KB each. Deleted and replaced files go to the Trash, where you can put them back."

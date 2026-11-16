@@ -5,10 +5,16 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "chatbot-972",
+  // The Cloudflare account the app lives in. Remove this line to deploy to your own.
+  "account_id": "ac884c4c755abc4f7ddc614c173baeca",
   "main": "server/worker.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
+  // No workers.dev address: people reach the app only through
+  // https://chat972.pages.dev (see address/).
+  "workers_dev": false,
+  "preview_urls": false,
 
   // The React app. Anything that isn't a file falls back to index.html so
   // page links like /admin/facts work; these paths always go to the Worker.
@@ -22,13 +28,21 @@
     {
       "binding": "DB",
       "database_name": "chatbot972",
-      // Filled in after `npx wrangler d1 create chatbot972` (any value works locally).
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // From `npx wrangler d1 create chatbot972` (any value works locally).
+      "database_id": "633e6f6f-655d-4f83-9c45-9263319cd41f",
       "migrations_dir": "drizzle"
     }
   ],
 
   "r2_buckets": [{ "binding": "FILES", "bucket_name": "chatbot972-files" }],
+
+  // Sends the signup codes (see server/lib/email.ts). Only from EMAIL_FROM.
+  "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@charliesweetland.com"] }],
+
+  // Workers AI, for the mic button: OpenAI's Whisper turns speech into text.
+  // There's no copy of it on your computer, so `npm run dev` uses the real one
+  // (needs `npx wrangler login`). It costs about $0.0005 per minute of talking.
+  "ai": { "binding": "AI", "remote": true },
 
   "queues": {
     "producers": [{ "binding": "SLACK_QUEUE", "queue": "chatbot972-slack" }],
@@ -40,8 +54,11 @@
   "triggers": { "crons": ["*/5 * * * *", "0 * * * *"] },
 
   "vars": {
-    // The app's public address. Set to the workers.dev address before deploying.
-    "APP_URL": "http://localhost:5173",
+    // The app's public address (the Pages site in address/). On your own
+    // computer, APP_URL in .env replaces this.
+    "APP_URL": "https://chat972.pages.dev",
+    // Signup codes come from this address (it must match send_email above).
+    "EMAIL_FROM": "noreply@charliesweetland.com",
     "SMTP_HOST": "smtp.gmail.com",
     "SMTP_PORT": "465"
   }

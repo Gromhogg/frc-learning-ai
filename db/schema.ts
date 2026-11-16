@@ -195,6 +195,8 @@ export const userProfiles = sqliteTable("user_profiles", {
   interests: text("interests").notNull().default("[]"),
   // Set only when the person firmly says what they focus on ("I only do wiring").
   statedFocus: text("stated_focus"),
+  // One short line on their experience, from what they wrote in "Your interests".
+  about: text("about"),
   // JSON: string[] — the starter chips on their empty chat screen.
   suggestions: text("suggestions").notNull().default("[]"),
   suggestionsGeneratedAt: text("suggestions_generated_at"),

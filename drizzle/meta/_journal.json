@@ -50,6 +50,13 @@
       "when": 1791939958354,
       "tag": "0006_api_keys",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794792083991,
+      "tag": "0007_interests_about",
+      "breakpoints": true
     }
   ]
 }

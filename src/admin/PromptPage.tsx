@@ -350,14 +350,14 @@ export default function PromptPage() {
   }
 
   const sectionsColumn = (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-xl font-semibold tracking-tight">Prompt</h1>
             {live ? <Badge>v{live.version}</Badge> : null}
           </div>
-          <p className="mt-1 max-w-xl text-sm text-muted">
+          <p className="mt-1 max-w-2xl text-sm text-muted">
             What the AI is told before every chat. Sections are joined top to bottom; switched-off ones are skipped.
             {live ? (
               <span className="text-faint">
@@ -462,7 +462,7 @@ export default function PromptPage() {
               dirty ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0",
             )}
           >
-            <div className="pointer-events-auto flex w-full max-w-2xl flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pl-4 shadow-float backdrop-blur">
+            <div className="pointer-events-auto flex w-full max-w-3xl flex-wrap items-center gap-2 rounded-2xl border border-line bg-surface/95 p-2 pl-4 shadow-float backdrop-blur">
               <span className="text-sm font-medium">
                 {changes.length} unsaved change{changes.length === 1 ? "" : "s"}
               </span>

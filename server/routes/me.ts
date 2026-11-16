@@ -1,8 +1,20 @@
+import { waitUntil } from "cloudflare:workers";
 import { Hono } from "hono";
 import { getAuth } from "../lib/require-auth.ts";
-import { clearInterests, getInterests } from "../lib/interests.ts";
+import { clearInterests, getInterests, saveDescribedInterests } from "../lib/interests.ts";
+import { describeInterests, MAX_DESCRIBE_CHARS } from "../lib/describe-interests.ts";
+import { rebuild } from "../lib/suggestions.ts";
 import { takeAttempt } from "../lib/limits.ts";
-import { checkKey, cleanKey, ownKeyInfo, removeOwnKey, saveOwnKey, teamApiKey } from "../ai/api-keys.ts";
+import {
+  apiKeyFor,
+  checkKey,
+  cleanKey,
+  NO_KEY,
+  ownKeyInfo,
+  removeOwnKey,
+  saveOwnKey,
+  teamApiKey,
+} from "../ai/api-keys.ts";
 
 // Things about the signed-in person, for that person only. Interests are
 // private: no admin route shows them.
@@ -12,6 +24,36 @@ const app = new Hono();
 app.get("/interests", async (c) => {
   const auth = await getAuth(c);
   if (!auth) return c.json({ error: "Not signed in." }, 401);
+  return c.json(await getInterests(auth.userId));
+});
+
+// POST /interests/describe { text } — the person says what they're into, in
+// their own words; the AI turns it into topics. Returns the new interests.
+app.post("/interests/describe", async (c) => {
+  const auth = await getAuth(c);
+  if (!auth) return c.json({ error: "Not signed in." }, 401);
+
+  const body = await c.req.json<{ text?: unknown }>().catch(() => ({ text: "" }));
+  const text = typeof body.text === "string" ? body.text.trim() : "";
+  if (!text) return c.json({ error: "Write or say a little about what you're into first." }, 400);
+  if (text.length > MAX_DESCRIBE_CHARS) {
+    return c.json({ error: `Keep it under ${MAX_DESCRIBE_CHARS} characters.` }, 400);
+  }
+
+  const tries = await takeAttempt(`describe:${auth.userId}`, 10, 60 * 60_000);
+  if (!tries.allowed) return c.json({ error: "That's a lot of changes. Try again in an hour." }, 429);
+
+  const { key } = await apiKeyFor(auth.userId);
+  if (!key) return c.json({ error: NO_KEY }, 503);
+
+  const described = await describeInterests(text, key);
+  if (!described) return c.json({ error: "The AI couldn't read that right now. Try again in a minute." }, 502);
+  if (described.topics.length === 0 && !described.focus) {
+    return c.json({ error: "The AI didn't find any robotics topics in that. Try naming what you work on or want to learn." }, 400);
+  }
+
+  await saveDescribedInterests(auth.userId, described);
+  waitUntil(rebuild(auth.userId, auth.role));
   return c.json(await getInterests(auth.userId));
 });
 

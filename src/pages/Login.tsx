@@ -11,7 +11,7 @@ import { Logo, Spinner } from "../components/ui/misc";
 
 // Same list and message as server/lib/school-email.ts — change both together.
 // The server checks too; this is just so people see the problem right away.
-const SCHOOL_DOMAINS = ["lghsstudent.org", "lghsuhsd.org"];
+const SCHOOL_DOMAINS = ["lgsstudent.org", "lgsuhsd.org"];
 const SCHOOL_EMAIL_ERROR = "Please input your school email";
 const MIN_PASSWORD = 6;
 const CODE_LENGTH = 6;
@@ -79,6 +79,14 @@ export default function Login() {
   const [resendIn, setResendIn] = useState(0);
   const [resending, setResending] = useState(false);
   const [focusFirst, setFocusFirst] = useState(0);
+
+  const [googleOn, setGoogleOn] = useState(false);
+  useEffect(() => {
+    fetch(`${API_BASE}/auth/options`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: { google?: boolean } | null) => setGoogleOn(Boolean(data?.google)))
+      .catch(() => {});
+  }, []);
 
   // Already signed in? Go straight to the chat.
   useEffect(() => {
@@ -218,17 +226,14 @@ export default function Login() {
         className="relative w-full max-w-[380px]"
       >
         <div className="mb-8 flex flex-col items-center text-center">
-          <Logo size={44} />
-          <p className="mt-5 text-[13px] font-semibold tracking-tight text-accent-text">972 Chat Bot</p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">{heading}</h1>
+          <Logo size={88} />
+          <h1 className="mt-4 text-2xl font-semibold tracking-tight">{heading}</h1>
           {step === "code" ? (
             <p className="mt-1.5 text-sm text-muted">
               We sent a 6-digit code to <span className="font-medium break-all text-fg">{sentTo}</span>. Check your
               spam folder if you don't see it — it can land there.
             </p>
-          ) : (
-            <p className="mt-1.5 text-sm text-muted">Your team's robotics mentor — the shop, the robot, FRC.</p>
-          )}
+          ) : null}
         </div>
 
         <div className="rounded-2xl border border-line bg-surface p-6 shadow-float">
@@ -292,53 +297,57 @@ export default function Login() {
             </motion.form>
           ) : (
             <motion.div key="form" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.2 }}>
-              <Button variant="outline" size="lg" className="w-full" onClick={openGoogle} aria-expanded={googleOpen}>
-                <GoogleIcon />
-                Continue with Google
-              </Button>
-              <AnimatePresence initial={false}>
-                {googleOpen ? (
-                  <motion.form
-                    key="google"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    onSubmit={continueWithGoogle}
-                    className="-m-1 overflow-hidden p-1"
-                  >
-                    <div className="pt-3">
-                      <Label htmlFor="google-email">Your school email</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          id="google-email"
-                          type="email"
-                          autoFocus={!googleEmail}
-                          autoComplete="email"
-                          placeholder="you@lghsstudent.org"
-                          value={googleEmail}
-                          onChange={(e) => {
-                            setGoogleEmail(e.target.value);
-                            setGoogleError(null);
-                          }}
-                          aria-invalid={googleError !== null}
-                          className={googleError ? "border-bad!" : undefined}
-                        />
-                        <Button type="submit" variant="primary" className="h-10">
-                          Continue
-                        </Button>
-                      </div>
-                      {googleError ? <p className="mt-1.5 text-sm text-bad">{googleError}</p> : null}
-                    </div>
-                  </motion.form>
-                ) : null}
-              </AnimatePresence>
+              {googleOn ? (
+                <>
+                  <Button variant="outline" size="lg" className="w-full" onClick={openGoogle} aria-expanded={googleOpen}>
+                    <GoogleIcon />
+                    Continue with Google
+                  </Button>
+                  <AnimatePresence initial={false}>
+                    {googleOpen ? (
+                      <motion.form
+                        key="google"
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: "auto", opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        onSubmit={continueWithGoogle}
+                        className="-m-1 overflow-hidden p-1"
+                      >
+                        <div className="pt-3">
+                          <Label htmlFor="google-email">Your school email</Label>
+                          <div className="flex gap-2">
+                            <Input
+                              id="google-email"
+                              type="email"
+                              autoFocus={!googleEmail}
+                              autoComplete="email"
+                              placeholder="you@lgsstudent.org"
+                              value={googleEmail}
+                              onChange={(e) => {
+                                setGoogleEmail(e.target.value);
+                                setGoogleError(null);
+                              }}
+                              aria-invalid={googleError !== null}
+                              className={googleError ? "border-bad!" : undefined}
+                            />
+                            <Button type="submit" variant="primary" className="h-10">
+                              Continue
+                            </Button>
+                          </div>
+                          {googleError ? <p className="mt-1.5 text-sm text-bad">{googleError}</p> : null}
+                        </div>
+                      </motion.form>
+                    ) : null}
+                  </AnimatePresence>
 
-              <div className="my-5 flex items-center gap-3 text-xs text-faint">
-                <span className="h-px flex-1 bg-line" />
-                or
-                <span className="h-px flex-1 bg-line" />
-              </div>
+                  <div className="my-5 flex items-center gap-3 text-xs text-faint">
+                    <span className="h-px flex-1 bg-line" />
+                    or
+                    <span className="h-px flex-1 bg-line" />
+                  </div>
+                </>
+              ) : null}
 
               <form onSubmit={submit} className="flex flex-col gap-4">
                 <div>
@@ -366,7 +375,7 @@ export default function Login() {
                         id="email"
                         type="email"
                         autoComplete="email"
-                        placeholder="you@lghsstudent.org"
+                        placeholder="you@lgsstudent.org"
                         value={email}
                         onChange={(e) => {
                           setEmail(e.target.value);

@@ -10,6 +10,7 @@ import { signToken } from "../lib/jwt.ts";
 import { getAuth } from "../lib/require-auth.ts";
 import { logEvent } from "../lib/events.ts";
 import { sendCodeEmail } from "../lib/email.ts";
+import { checkAdminPassword, hasAdminPassword, isOwnerEmail } from "../lib/admin-access.ts";
 import { emailDomain, isSchoolEmail, SCHOOL_EMAIL_ERROR } from "../lib/school-email.ts";
 import { APP_URL } from "../lib/config.ts";
 import { clearAttempts, takeAttempt } from "../lib/limits.ts";
@@ -55,6 +56,7 @@ function safeUser(user: UserRow) {
     email: user.email,
     avatarUrl: user.avatarUrl,
     role: user.role,
+    owner: isOwnerEmail(user.email),
     createdAt: user.createdAt,
   };
 }
@@ -145,6 +147,9 @@ const oauthCookie = {
 } as const;
 
 // ── Google sign-in ───────────────────────────────────────────────────────────
+
+// The login page only shows "Continue with Google" when it's set up.
+app.get("/options", (c) => c.json({ google: getGoogle() !== null }));
 
 // The login page asks for the school email first and passes it here. Telling
 // Google which account we want (and showing the account picker) stops the
@@ -248,7 +253,16 @@ app.get("/me", async (c) => {
 
   const [user] = await db.select(safeColumns).from(users).where(eq(users.id, auth.userId));
   if (!user) return c.json(null, 401);
-  return c.json(user);
+  const owner = isOwnerEmail(user.email);
+  // The owner is always an admin.
+  if (owner && user.role !== "admin") {
+    await db
+      .update(users)
+      .set({ role: "admin", adminSince: sql`coalesce(${users.adminSince}, CURRENT_TIMESTAMP)` })
+      .where(eq(users.id, user.id));
+    return c.json({ ...user, role: "admin", owner });
+  }
+  return c.json({ ...user, owner });
 });
 
 // ── Name or email + password ─────────────────────────────────────────────────
@@ -509,10 +523,6 @@ app.post("/register/verify", async (c) => {
 // is deliberately no way to remove admin access in the app.
 
 /** The ADMIN_CODE secret. TEACHER_CODE is the old name — still read so old .env files work. */
-function adminPassword(): string {
-  return (process.env.ADMIN_CODE || process.env.TEACHER_CODE || "").trim();
-}
-
 app.post("/admin-code", async (c) => {
   const auth = await getAuth(c);
   if (!auth) return c.json({ error: "Not signed in." }, 401);
@@ -520,14 +530,21 @@ app.post("/admin-code", async (c) => {
   const [current] = await db.select().from(users).where(eq(users.id, auth.userId));
   if (!current) return c.json({ error: "Not signed in." }, 401);
 
-  // Already an admin: nothing to check, just hand back a fresh token.
-  if (current.role === "admin") {
-    const token = await signToken({ userId: current.id, role: "admin" });
-    return c.json({ token, user: safeUser(current) });
+  // Already an admin (or the owner): nothing to check, just hand back a fresh token.
+  if (current.role === "admin" || isOwnerEmail(current.email)) {
+    const [user] =
+      current.role === "admin"
+        ? [current]
+        : await db
+            .update(users)
+            .set({ role: "admin", adminSince: sql`coalesce(${users.adminSince}, CURRENT_TIMESTAMP)` })
+            .where(eq(users.id, current.id))
+            .returning();
+    const token = await signToken({ userId: user.id, role: "admin" });
+    return c.json({ token, user: safeUser(user) });
   }
 
-  const expected = adminPassword();
-  if (!expected) {
+  if (!(await hasAdminPassword())) {
     return c.json(
       { error: "The admin password isn't set up yet. Add the ADMIN_CODE secret (see the README)." },
       400,
@@ -541,7 +558,7 @@ app.post("/admin-code", async (c) => {
   if (!tries.allowed) return c.json({ error: TOO_MANY_TRIES }, 429);
 
   const typed = str((await readBody(c)).code).trim();
-  if (!typed || !sameSecret(typed, expected)) {
+  if (!(await checkAdminPassword(typed))) {
     return c.json({ error: "That password isn't right." }, 400);
   }
 

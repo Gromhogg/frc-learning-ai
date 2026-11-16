@@ -1,24 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { api, errorMessage } from "../lib/api";
 
-// "Talk to type" for the message box. Uses the browser's own speech
-// recognition (Chrome, Edge, Safari) to turn speech into text. While
-// listening, nothing is sent to our server — the words only go into the box.
-// It also measures how loud the mic is, for the live meter and to stop
-// listening after a long quiet pause.
+// "Talk to type" for the message box. Records from the mic in the browser,
+// then sends the clip to our server, where OpenAI's Whisper model (run by
+// Cloudflare) turns it into text. The text goes into the box; nothing is sent
+// to the chat until the person presses send. It also measures how loud the
+// mic is, for the live meter and to stop after a long quiet pause.
 
 /** Stop after this much quiet, so a pause to think never sends half a thought. */
 const SILENCE_MS = 10_000;
-/** Longest one listening session can run. */
+/** Longest one recording can run. */
 const MAX_MS = 3 * 60_000;
-/** Most text the box can hold from talking. */
-const MAX_CHARS = 4000;
 /** Mic loudness (RMS, 0–1) above this counts as someone talking. */
 const SOUND_LEVEL = 0.01;
-/** How long to wait for the last words after stopping. */
-const FINISH_WAIT_MS = 1500;
+/** Give up on turning speech into text after this long. */
+const TRANSCRIBE_TIMEOUT_MS = 60_000;
 
 const BLOCKED = "Your microphone is blocked. Allow it from the icon in the address bar.";
 const NO_MIC = "No microphone found.";
+const NOTHING_HEARD: VoiceMessage = { tone: "note", text: "Didn't hear anything. Tap the mic and try again." };
 
 export type VoiceStatus = "idle" | "starting" | "listening" | "finishing";
 export interface VoiceMessage {
@@ -26,48 +26,15 @@ export interface VoiceMessage {
   tone: "note" | "error";
 }
 
-// TypeScript doesn't know the speech recognition types in every setup, so
-// here are the small parts we use.
-interface SpeechAlternative {
-  readonly transcript: string;
-}
-interface SpeechResult {
-  readonly isFinal: boolean;
-  readonly length: number;
-  readonly [index: number]: SpeechAlternative;
-}
-interface SpeechResultList {
-  readonly length: number;
-  readonly [index: number]: SpeechResult;
-}
-interface SpeechResultEvent extends Event {
-  readonly results: SpeechResultList;
-}
-interface SpeechErrorEvent extends Event {
-  readonly error: string;
-}
-interface Recognizer {
-  continuous: boolean;
-  interimResults: boolean;
-  lang: string;
-  onresult: ((event: SpeechResultEvent) => void) | null;
-  onerror: ((event: SpeechErrorEvent) => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-  abort(): void;
-}
-type RecognizerClass = new () => Recognizer;
+// Chrome, Edge and Firefox record WebM; Safari records MP4. Whisper reads all of them.
+const RECORDING_TYPES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"];
 
-function getRecognizerClass(): RecognizerClass | null {
-  if (typeof window === "undefined") return null;
-  const w = window as unknown as { SpeechRecognition?: RecognizerClass; webkitSpeechRecognition?: RecognizerClass };
-  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+function pickRecordingType(): string | undefined {
+  return RECORDING_TYPES.find((type) => MediaRecorder.isTypeSupported?.(type));
 }
 
-/** True in Chrome, Edge and Safari. False in Firefox (no speech recognition). */
 function isVoiceSupported() {
-  return getRecognizerClass() !== null && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
+  return typeof MediaRecorder !== "undefined" && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
 }
 
 /** Loudness of a chunk of sound, 0 (silent) to 1 (max). */
@@ -92,72 +59,58 @@ function micErrorMessage(err: unknown): string {
   return "Couldn't turn on the microphone.";
 }
 
-function speechErrorMessage(code: string): string {
-  switch (code) {
-    case "not-allowed":
-      return BLOCKED;
-    case "service-not-allowed":
-      return "Voice typing is turned off in this browser.";
-    case "network":
-      return "Voice needs an internet connection.";
-    case "audio-capture":
-      return NO_MIC;
-    case "language-not-supported":
-      return "Voice typing isn't available in this browser.";
-    default:
-      return "Voice typing stopped. Tap the mic to try again.";
-  }
+/** Send one clip to the server and get its text back. */
+async function transcribe(clip: Blob): Promise<string> {
+  const ext = clip.type.includes("mp4") ? "m4a" : clip.type.includes("ogg") ? "ogg" : "webm";
+  const form = new FormData();
+  form.append("audio", clip, `voice.${ext}`);
+  const res = await api<{ text: string }>("/api/transcribe", {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(TRANSCRIBE_TIMEOUT_MS),
+  });
+  return res.text;
 }
 
 interface SessionEvents {
-  /** New text for the message box. */
-  onText: (text: string) => void;
-  /** The mic is on and the words are coming in. */
+  /** The mic is on and recording. */
   onListening: (analyser: AnalyserNode | null, startedAt: number) => void;
-  /** Stopped listening; waiting a moment for the last words. */
+  /** Stopped recording; turning the clip into text. */
   onFinishing: () => void;
   /** Fully stopped. `text` is the final text for the box. */
   onDone: (text: string, message: VoiceMessage | null) => void;
 }
 
 interface Session {
-  /** Stop listening. "finish" waits a moment for the last words; "now" doesn't. */
+  /** Stop. "finish" turns what was said into text; "now" throws the recording away. */
   stop: (how: "finish" | "now", message?: VoiceMessage | null) => void;
-  /** The person typed while listening: their text becomes the new starting point. */
+  /** The person typed while recording: their text becomes the new starting point. */
   edit: (text: string) => void;
   /** Stop and don't report anything back (the box is going away). */
   dispose: () => void;
 }
 
-/** One listening session: mic, speech recognition, loudness checks, and timers. */
-function startSession(Rec: RecognizerClass, startText: string, events: SessionEvents): Session {
-  let active = true; // still meant to be listening
+/** One recording: mic, recorder, loudness checks, timers, then the text. */
+function startSession(startText: string, events: SessionEvents): Session {
+  let active = true; // still meant to be recording
   let done = false; // fully stopped and cleaned up
-  let running = false; // the speech recognizer is on right now
   let quiet = false; // don't report back (the box is gone)
+  let keepClip = false; // turn the recording into text when it stops
   let endMessage: VoiceMessage | null = null;
+  let before = startText;
 
   let stream: MediaStream | null = null;
+  let recorder: MediaRecorder | null = null;
+  const chunks: Blob[] = [];
   let ctx: AudioContext | null = null;
   let analyser: AnalyserNode | null = null;
   let samples: Float32Array<ArrayBuffer> | null = null;
   let checkTimer = 0;
-  let restartTimer = 0;
-  let finishTimer = 0;
 
   let startedAt = 0;
   let lastSoundAt = 0;
-  let lastStartAt = 0;
-  let quickEnds = 0;
-
-  // The text is: (box text before these words) + (earlier words) + (words now).
-  let before = startText;
-  let earlier = ""; // words from earlier recognizer runs (the browser restarts it)
-  let current = ""; // words from this recognizer run
-  let skip = 0; // results of this run already kept in `before` (after the person typed)
-  let resultCount = 0;
-
-  const fullText = () => joinText(before, `${earlier} ${current}`.replace(/\s+/g, " ").trim());
+  let measured = false; // got at least one loudness reading
+  let heardSound = false;
 
   // Make the audio context now, while we still have the tap (Safari needs this).
   try {
@@ -166,82 +119,27 @@ function startSession(Rec: RecognizerClass, startText: string, events: SessionEv
     ctx = null;
   }
 
-  const rec = new Rec();
-  rec.continuous = true;
-  rec.interimResults = true;
-  rec.lang = "en-US";
-
-  rec.onresult = (event) => {
-    if (done) return;
-    let words = "";
-    for (let i = skip; i < event.results.length; i++) words += ` ${event.results[i][0]?.transcript ?? ""}`;
-    current = words;
-    resultCount = event.results.length;
-    lastSoundAt = Date.now();
-    const text = fullText();
-    events.onText(text);
-    if (active && text.length >= MAX_CHARS) {
-      stop("finish", { tone: "note", text: "Stopped at 4,000 characters — press send when ready." });
-    }
-  };
-
-  rec.onerror = (event) => {
-    // "no-speech" just means a quiet moment; the recognizer restarts below.
-    if (event.error === "no-speech" || event.error === "aborted") return;
-    stop("now", { tone: "error", text: speechErrorMessage(event.error) });
-  };
-
-  rec.onend = () => {
-    running = false;
-    if (done) return;
-    if (!active) {
-      finish();
-      return;
-    }
-    // The browser ended it on its own while we still want to listen.
-    // Keep the words so far and start a new run.
-    earlier = `${earlier} ${current}`;
-    current = "";
-    skip = 0;
-    resultCount = 0;
-    // Don't get stuck restarting over and over if it keeps ending right away.
-    quickEnds = Date.now() - lastStartAt < 1500 ? quickEnds + 1 : 0;
-    if (quickEnds >= 5) {
-      stop("now", { tone: "error", text: speechErrorMessage("") });
-      return;
-    }
-    restartTimer = window.setTimeout(runRecognizer, quickEnds * 400);
-  };
-
-  function runRecognizer() {
-    if (!active) return;
-    lastStartAt = Date.now();
-    try {
-      rec.start();
-      running = true;
-    } catch {
-      // Already running.
-    }
-  }
-
   // Every 100ms: is someone talking? Too quiet for too long, or too long overall?
   function check() {
     if (!active) return;
     const now = Date.now();
     if (analyser && samples && ctx?.state === "running") {
       analyser.getFloatTimeDomainData(samples);
-      if (loudness(samples) > SOUND_LEVEL) lastSoundAt = now;
+      measured = true;
+      if (loudness(samples) > SOUND_LEVEL) {
+        lastSoundAt = now;
+        heardSound = true;
+      }
     }
     if (now - startedAt >= MAX_MS) {
       stop("finish", { tone: "note", text: "Stopped after 3 minutes — press send when ready." });
     } else if (now - lastSoundAt >= SILENCE_MS) {
-      stop("finish", { tone: "note", text: "Stopped after 10 quiet seconds — press send when ready." });
+      stop("finish", heardSound ? { tone: "note", text: "Stopped after 10 quiet seconds — press send when ready." } : null);
     }
   }
 
   function releaseAudio() {
     window.clearInterval(checkTimer);
-    window.clearTimeout(restartTimer);
     stream?.getTracks().forEach((track) => track.stop());
     stream = null;
     if (ctx && ctx.state !== "closed") void ctx.close().catch(() => {});
@@ -249,40 +147,56 @@ function startSession(Rec: RecognizerClass, startText: string, events: SessionEv
     analyser = null;
   }
 
-  function finish() {
+  function finish(text: string) {
     if (done) return;
     done = true;
     active = false;
     releaseAudio();
-    window.clearTimeout(finishTimer);
-    rec.onresult = null;
-    rec.onerror = null;
-    rec.onend = null;
-    if (running) rec.abort();
-    running = false;
-    if (!quiet) events.onDone(fullText(), endMessage);
+    if (!quiet) events.onDone(text, endMessage);
+  }
+
+  async function sendClip() {
+    // No sound at all (when we could measure it): don't bother sending silence.
+    if (chunks.length === 0 || (measured && !heardSound)) {
+      endMessage ??= NOTHING_HEARD;
+      finish(before);
+      return;
+    }
+    const clip = new Blob(chunks, { type: recorder?.mimeType || chunks[0].type || "audio/webm" });
+    try {
+      const spoken = await transcribe(clip);
+      if (!spoken) endMessage = NOTHING_HEARD;
+      finish(joinText(before, spoken));
+    } catch (err) {
+      endMessage = {
+        tone: "error",
+        text:
+          err instanceof DOMException && err.name === "TimeoutError"
+            ? "Voice typing took too long. Try again, or type instead."
+            : errorMessage(err, "Couldn't turn that into text. Try again, or type instead."),
+      };
+      finish(before);
+    }
   }
 
   function stop(how: "finish" | "now", message: VoiceMessage | null = null) {
-    if (done) return;
-    if (!active) {
-      if (how === "now") finish();
+    if (done || !active) {
+      if (how === "now" && !done) {
+        keepClip = false;
+        finish(before);
+      }
       return;
     }
     active = false;
     endMessage = message;
-    releaseAudio();
-    if (how === "finish" && running) {
-      events.onFinishing();
-      try {
-        rec.stop();
-      } catch {
-        finish();
-        return;
-      }
-      finishTimer = window.setTimeout(finish, FINISH_WAIT_MS);
+    keepClip = how === "finish";
+    window.clearInterval(checkTimer);
+    if (recorder && recorder.state !== "inactive") {
+      if (keepClip) events.onFinishing();
+      recorder.stop(); // onstop does the rest
+      if (!keepClip) finish(before);
     } else {
-      finish();
+      finish(before);
     }
   }
 
@@ -318,11 +232,27 @@ function startSession(Rec: RecognizerClass, startText: string, events: SessionEv
       }
     }
 
+    try {
+      const mimeType = pickRecordingType();
+      recorder = new MediaRecorder(micStream, { ...(mimeType ? { mimeType } : {}), audioBitsPerSecond: 32_000 });
+    } catch {
+      stop("now", { tone: "error", text: "This browser can't record from the microphone." });
+      return;
+    }
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) chunks.push(event.data);
+    };
+    recorder.onstop = () => {
+      releaseAudio();
+      if (keepClip && !done) void sendClip();
+    };
+    recorder.onerror = () => stop("now", { tone: "error", text: "Recording stopped. Tap the mic to try again." });
+    recorder.start(1000);
+
     startedAt = Date.now();
     lastSoundAt = startedAt;
     events.onListening(analyser, startedAt);
     checkTimer = window.setInterval(check, 100);
-    runRecognizer();
   }
 
   // Start on the next tick, so the caller has the session before any events.
@@ -331,11 +261,7 @@ function startSession(Rec: RecognizerClass, startText: string, events: SessionEv
   return {
     stop,
     edit(text) {
-      if (done) return;
-      before = text;
-      earlier = "";
-      current = "";
-      skip = resultCount;
+      if (!done) before = text;
     },
     dispose() {
       quiet = true;
@@ -344,14 +270,14 @@ function startSession(Rec: RecognizerClass, startText: string, events: SessionEv
   };
 }
 
-// Only one listening session at a time on the whole page.
+// Only one recording at a time on the whole page.
 let activeSession: Session | null = null;
 
 /**
- * Talk to type. `onText` gets the full message box text as words come in.
- * Call `start(boxText)` to listen, `stop()` to stop (it resolves with the
- * final text once the last words are in), and `edit(boxText)` when the person
- * types while listening.
+ * Talk to type. Call `start(boxText)` to record, `stop()` to stop (it
+ * resolves with the final box text once the words are in), and
+ * `edit(boxText)` when the person types while recording. `onText` gets the
+ * full message box text when the words arrive.
  */
 export function useVoiceInput(onText: (text: string) => void) {
   const [supported] = useState(isVoiceSupported);
@@ -368,13 +294,11 @@ export function useVoiceInput(onText: (text: string) => void) {
   });
 
   const start = useCallback((boxText: string) => {
-    const Rec = getRecognizerClass();
-    if (!Rec || sessionRef.current) return;
+    if (!isVoiceSupported() || sessionRef.current) return;
     activeSession?.stop("finish");
     setMessage(null);
     setStatus("starting");
-    const session: Session = startSession(Rec, boxText, {
-      onText: (text) => onTextRef.current(text),
+    const session: Session = startSession(boxText, {
       onListening: (node, at) => {
         setAnalyser(node);
         setStartedAt(at);

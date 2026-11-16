@@ -1,7 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { promptVersions, settings, teamFacts, users } from "../../db/schema.ts";
-import { DEFAULT_SYSTEM_PROMPT } from "./default-prompt.ts";
+import { DEFAULT_SYSTEM_PROMPT, GROUND_RULES } from "./default-prompt.ts";
 import { buildDocIndex } from "./docs.ts";
 import {
   assembleDoc,
@@ -212,7 +212,7 @@ export async function buildSystemPrompt(): Promise<string> {
     .where(eq(teamFacts.status, "approved"))
     .orderBy(asc(teamFacts.id));
 
-  const parts = [base];
+  const parts = [base, GROUND_RULES];
   if (docIndex) parts.push(docIndex);
 
   if (facts.length > 0) {

@@ -26,7 +26,7 @@ const IDEAS = [
   "Make answers shorter for beginners",
   "Ask a follow-up question to check understanding",
   "Look at recent chats — what's going wrong?",
-  "Add a rule: always mention safety glasses for the mill",
+  "Add a rule: always mention safety glasses for shop tools",
 ];
 
 /**

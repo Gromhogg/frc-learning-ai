@@ -61,7 +61,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Settings"
         description="The team's Claude key, and which model does each job. Cheaper models are faster and cost less; Opus is the smartest but costs the most."

@@ -136,8 +136,7 @@ export function ApiKeyDialog({ open, onOpenChange }: { open: boolean; onOpenChan
               >
                 console.anthropic.com
               </a>
-              . Your chats (here and in Slack) and your suggestions are then billed to you. The key is stored locked
-              and never shown again — not even to admins.
+              .
             </p>
           </div>
         )}

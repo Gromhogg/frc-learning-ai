@@ -2,12 +2,13 @@ import { Sparkles } from "lucide-react";
 import { useAuth } from "../../auth/auth-context";
 import { useSuggestions } from "../../hooks/use-suggestions";
 
-// Starter chips on the empty chat screen. Everyone starts with the built-in
-// ones; once the AI has learned what someone is into, they get their own.
+// Starter chips on the empty chat screen. Hidden until the AI has learned
+// what someone is into; then they get their own.
 
 export function StarterSuggestions({ onPick }: { onPick: (text: string) => void }) {
   const { user } = useAuth();
   const { suggestions, personalized } = useSuggestions(user);
+  if (!personalized || suggestions.length === 0) return null;
 
   return (
     <div className="relative mt-4">

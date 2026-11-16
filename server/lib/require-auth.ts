@@ -1,5 +1,6 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { verifyToken, type TokenPayload } from "./jwt.ts";
+import { currentRole } from "./admin-access.ts";
 
 /**
  * Pull the signed-in user out of the Authorization header.
@@ -19,8 +20,11 @@ export async function getAuth(c: Context): Promise<TokenPayload | null> {
  */
 export async function getAdmin(c: Context): Promise<TokenPayload | null> {
   const auth = await getAuth(c);
-  if (!auth || auth.role !== "admin") return null;
-  return auth;
+  if (!auth) return null;
+  // The database decides, not the token: someone made or removed as admin
+  // still holds a sign-in token with their old role for up to 30 days.
+  if ((await currentRole(auth.userId)) !== "admin") return null;
+  return { ...auth, role: "admin" };
 }
 
 export type AdminEnv = { Variables: { adminId: number } };

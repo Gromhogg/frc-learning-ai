@@ -70,10 +70,10 @@ export default function SuggestionsPage() {
   const shown = tab === "pending" ? pending : past;
 
   return (
-    <div className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Suggestions"
-        description="The AI reviews recent student chats once a day (👎 answers first) and suggests changes to its own prompt. Nothing changes until you apply a suggestion."
+        description="The AI reviews recent student chats once a day and suggests changes to its own prompt."
         actions={
           <Button variant="primary" onClick={() => void runReview()} disabled={busy}>
             {busy ? <Spinner /> : <Sparkles />}

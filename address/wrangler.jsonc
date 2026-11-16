@@ -1,0 +1,14 @@
+// The app's public address: https://chat972.pages.dev
+//
+// A Cloudflare Pages site that hands every request to the app (the
+// "chatbot-972" Worker) unchanged. It exists only so the team gets a short
+// address with nothing but 972 in it. Deploy it once with
+// `npm run deploy:address` after the app itself is online. It goes to the
+// same Cloudflare account as the app (account_id in ../wrangler.jsonc).
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "chat972",
+  "pages_build_output_dir": "./public",
+  "compatibility_date": "2026-10-01",
+  "services": [{ "binding": "APP", "service": "chatbot-972" }]
+}

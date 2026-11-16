@@ -1,10 +1,24 @@
 # 972 Chat Bot
 
-A chat app for FRC team 972. Students ask about the shop, the robot, wiring,
+**The app is online at <https://chat972.pages.dev>.** New here? Read
+[TEAM-GUIDE.md](TEAM-GUIDE.md) — it's the short version for students and
+mentors.
+
+A chat app for FRC Team 972, Iron Claw. Students ask about the shop, the robot, wiring,
 CAD, or code — by typing, talking, or sending a photo — and an AI mentor
-answers. The starter questions on the empty chat screen are picked for each
-person, based on what they've been asking about. (Each person can see and
+answers. Starter questions show up on the empty chat screen once the bot
+has learned what someone asks about, picked for that person and their level. (Each person can see and
 clear this from their name menu → **Your interests**. Nobody else sees it.)
+
+**Robotics only.** The bot sticks to robotics and the team. It won't do
+homework, essays, or other schoolwork, even if someone says it's for
+robotics. This rule is built in (`GROUND_RULES` in
+`server/lib/default-prompt.ts`), so editing the prompt can't remove it.
+
+**Only true facts.** The bot starts out knowing just the basics about 972
+(Iron Claw, Los Gatos High School, FIRST California district, first season
+2002). It doesn't guess about the robot, shop, or tools. It learns those from
+chats as team facts, and a mentor approves each one first.
 
 **Pictures.** The bot can find photos and diagrams (from Wikimedia Commons,
 or the web) and show them under its answer.
@@ -35,17 +49,22 @@ There are two kinds of people:
 | Edit the AI's instructions, apply suggestions | ❌ | ✅ |
 | Review team facts, manage reference docs | ❌ | ✅ |
 
-**Accounts.** New accounts need a school email (`@lghsstudent.org` or
-`@lghsuhsd.org`) and a 6-digit code that gets emailed to them from the team
-Gmail. Google sign-in asks for the school email first, so it can't fall back
+**Accounts.** New accounts need a school email (`@lgsstudent.org` or
+`@lgsuhsd.org`) and a 6-digit code that gets emailed to them (from
+noreply@charliesweetland.com, through Cloudflare). Google sign-in asks for the school email first, so it can't fall back
 to a personal Gmail. After 10 wrong passwords, an account is locked for 15
 minutes.
 
 **Admins.** Everyone sees an **Admin** button. Typing the admin password once
-makes you an admin for good. The password is the `ADMIN_CODE` secret. Admins
-can see who else is an admin (Admin → **Admins**); nobody can remove admin
-access in the app. The server checks this on every admin request, not just in
-the screen, and allows 5 wrong tries per 15 minutes.
+makes you an admin. Admins can see who else is an admin (Admin → **Admins**).
+The server checks the database on every admin request, not just the screen,
+and allows 5 wrong tries per 15 minutes.
+
+**The owner.** The account whose email is in the `OWNER_EMAIL` secret is the
+owner. Only the owner can make or remove admins and change the admin password
+(Admin → **Admins**; it asks for the current password first). The owner is
+always an admin. The admin password starts as the `ADMIN_CODE` secret; once
+the owner changes it in the app, the new one is used instead.
 
 **API keys.** Chats run on the team's Claude API key. An admin can set or
 replace it in the app (Admin → **Settings** → Team API key); until then the
@@ -60,10 +79,12 @@ If two admins edit at once, the second one sees both versions instead of
 overwriting. Removed facts and deleted docs can be restored. Admin → History →
 **Activity** shows who changed what.
 
-**Voice.** The mic button in the message box turns speech into text (Chrome,
-Edge, Safari). It sends one message when you press send, and stops on its own
-after 10 quiet seconds or 3 minutes without sending. The browser sends the
-audio to Google (Chrome) or Apple (Safari) to turn it into words.
+**Voice.** The mic button in the message box turns speech into text, in any
+modern browser (Chrome, Edge, Safari, Firefox). Tap it, talk, tap it again (or
+press send). It also stops on its own after 10 quiet seconds or 3 minutes. The
+recording goes to Cloudflare, where OpenAI's Whisper model (the same kind of
+speech-to-text ChatGPT uses) turns it into words. The recording isn't saved.
+It costs about $0.0005 per minute of talking, on the Cloudflare account.
 
 Built with:
 - **Screens** — React 19, Vite, Tailwind, Radix menus and dialogs (`src/`)
@@ -165,9 +186,12 @@ Learning-App` and `npm run dev` — steps 1–5 only happen once.
 
 ## Putting it online (Cloudflare)
 
-The real app runs on **Cloudflare Workers**. It will live at a free address
-like `https://chatbot-972.your-account.workers.dev`. Everything — the app,
-the database, and the files — lives in one Cloudflare account.
+The real app runs on **Cloudflare Workers**, at <https://chat972.pages.dev>.
+Everything — the app, the database, and the files — lives in one Cloudflare
+account. **This is already done** for the team's copy; these steps are for
+setting it up again or in another account. (`wrangler.jsonc` and the
+`deploy:address` script in `package.json` name the current Cloudflare
+account — change both to use your own.)
 
 Do these steps once, in the Terminal, inside the app's folder.
 
@@ -224,13 +248,15 @@ the app doesn't use it any more.
 
 ```bash
 npm run deploy
+npm run deploy:address
 ```
-The first time, it may ask you to pick a `workers.dev` name for your account.
-At the end it prints the app's address, like
-`https://chatbot-972.your-account.workers.dev`.
+The first puts the app online. The second puts up its short address,
+`https://chat972.pages.dev` (a small Cloudflare Pages site in `address/` that
+passes everything to the app). Only the first is needed after code changes.
 
-Open `wrangler.jsonc`, find the `"APP_URL"` line, and put that address there
-(no `/` at the end).
+If you use a different address, put it on the `"APP_URL"` line in
+`wrangler.jsonc` (no `/` at the end), and change `"name"` in
+`address/wrangler.jsonc` to match.
 
 ### 6. Add the secrets
 
@@ -242,6 +268,7 @@ Enter.
 npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put JWT_SECRET
 npx wrangler secret put ADMIN_CODE
+npx wrangler secret put OWNER_EMAIL
 ```
 - `ANTHROPIC_API_KEY` — your `sk-ant-…` key. (You can also set or change
   the team key later in the app: Admin → Settings.)
@@ -249,7 +276,8 @@ npx wrangler secret put ADMIN_CODE
   use the same one as in your old `.env`**, so people stay signed in. It
   also locks saved API keys, so if you ever change it, people need to add
   their keys again.
-- `ADMIN_CODE` — the admin password.
+- `ADMIN_CODE` — the starting admin password (the owner can change it in the app).
+- `OWNER_EMAIL` — the email of the owner's account (see **The owner** above).
 
 The others are optional and are explained below: `SMTP_USER` and `SMTP_PASS`
 (email), `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (Google sign-in),
@@ -270,10 +298,19 @@ If something isn't working, this shows what the app is doing, live:
 npx wrangler tail
 ```
 
-### Email: the team Gmail
+### Email
 
-Sign-up codes are sent from a team Gmail account. Gmail needs an
-**app password** for this (not the normal password).
+Sign-up codes are sent by **Cloudflare Email Sending** from
+`noreply@charliesweetland.com` (the `send_email` part and `EMAIL_FROM` in
+`wrangler.jsonc`). It's part of Workers Paid: 3,000 emails a month are
+included. The domain was set up once with
+`npx wrangler email sending enable charliesweetland.com`. To send from
+another domain, set it up the same way, then change both places in
+`wrangler.jsonc`.
+
+**Or use a Gmail account instead.** If `SMTP_USER` and `SMTP_PASS` are set,
+codes come from that Gmail. Gmail needs an **app password** for this (not the
+normal password).
 
 1. Sign in to the team Gmail. Go to <https://myaccount.google.com/security>
    and turn on **2-Step Verification**.
@@ -286,9 +323,9 @@ Sign-up codes are sent from a team Gmail account. Gmail needs an
    ```
    `SMTP_USER` is the Gmail address. `SMTP_PASS` is the 16-letter app password.
 
-Until these are set, the code is printed in the log (`npx wrangler tail`)
-instead of emailed. To send real emails when running on your own computer,
-put the same two lines in `.env`.
+If neither is set up, the code is printed in the log (`npx wrangler tail`)
+instead of emailed. On your own computer the code is always printed in the
+Terminal, unless you put the two Gmail lines in `.env`.
 
 ### Google sign-in
 
@@ -395,6 +432,7 @@ the same file; suggestion limits are at the top of `server/lib/suggestions.ts`.
 | --- | --- |
 | `npm run dev` | Run the app on your computer (port 5173) |
 | `npm run deploy` | Build and put the app online |
+| `npm run deploy:address` | Put the short address (chat972.pages.dev) online — only needed once |
 | `npm run build` | Type check + production build |
 | `npm run lint` | Check code style |
 | `npm run db:migrate:local` | Update the database on your computer |

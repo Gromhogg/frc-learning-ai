@@ -1,0 +1,48 @@
+# 972 Chat Bot — Team guide
+
+**Open it here: <https://chat972.pages.dev>** (works on a laptop or a phone)
+
+An AI helper for Team 972, Iron Claw. Ask it about the robot, wiring, CAD,
+code, the shop, or FRC in general.
+
+## Students
+
+1. **Make an account.** Click **Create an account**. Use your school email
+   (`@lgsstudent.org`), your name, and a password.
+2. **Check your school email** for a 6-digit code (look in spam if it's not
+   there), and type it in.
+3. **Ask anything about robotics.** Type, press the **mic** to talk, or add a
+   **photo** of a part, wiring, or CAD.
+4. **Thumbs up or down** on answers. This is how the bot gets better.
+
+Good to know:
+- It's **robotics only**. It won't do homework or other schoolwork.
+- It's **still learning about 972**. If it doesn't know something about our
+  robot or shop, it says so. Ask a mentor, and the bot can learn it later.
+
+## Mentors
+
+1. **Make an account** like a student. Then click **Admin** (top right) and
+   type the admin password. You only do this once.
+2. **First time only: add the team's Claude API key.** Go to **Admin →
+   Settings → Team API key** and paste it. Until then, the bot is switched
+   off for everyone.
+   - Get a key at <https://console.anthropic.com> → **Settings → API Keys**.
+     It starts with `sk-ant-`.
+   - Add some credit under **Billing**. A few dollars lasts a long time.
+   - Tip: set a monthly limit under **Settings → Limits** so the cost can't
+     surprise anyone.
+3. **Once a week or so:**
+   - **Team facts** — the bot picks up facts about our team from chats.
+     Approve the true ones; remove the wrong ones. It only uses approved facts.
+   - **Suggestions** — ideas for improving the bot's instructions. Click
+     **Apply** or **Dismiss**.
+   - **Docs** — add true info about our robot, shop, and tools. The bot reads
+     these when it answers.
+4. **Nothing is lost.** Every change can be undone from **History**.
+
+## Cost
+
+- **The AI** is billed to the team's Anthropic account, per use. Most chats
+  cost a few cents or less.
+- **Hosting** is already set up and paid for.

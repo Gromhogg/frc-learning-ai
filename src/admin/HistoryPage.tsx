@@ -30,6 +30,8 @@ const ACTION_LABELS: Record<string, string> = {
   "doc.restore": "Restored doc",
   "settings.model": "Changed model",
   "admin.grant": "Added admin",
+  "admin.remove": "Removed admin",
+  "admin.password": "Admin password",
 };
 
 /** Things that took something away get a warning color; everything else is plain. */
@@ -127,7 +129,7 @@ export default function HistoryPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
+    <div className="mx-auto w-full max-w-[1330px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Versions"
         description={

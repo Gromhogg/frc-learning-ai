@@ -1,4 +1,3 @@
-import { Cog } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "../../lib/cn";
 
@@ -110,15 +109,7 @@ export function Avatar({ name, src, size = 28 }: { name: string; src?: string | 
   );
 }
 
-/** The app mark: a cog in a rounded accent square. */
+/** The Team 972 (Iron Claw) logo. */
 export function Logo({ size = 28 }: { size?: number }) {
-  return (
-    <span
-      className="inline-flex shrink-0 items-center justify-center rounded-[30%] bg-accent text-accent-fg shadow-soft"
-      style={{ width: size, height: size }}
-      aria-hidden
-    >
-      <Cog style={{ width: size * 0.6, height: size * 0.6 }} strokeWidth={2.25} />
-    </span>
-  );
+  return <img src="/logo-972.png" alt="Team 972" width={size} height={size} className="shrink-0 select-none" draggable={false} />;
 }

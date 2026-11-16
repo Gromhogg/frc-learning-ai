@@ -12,6 +12,7 @@ import { MessageList } from "../components/chat/message-list";
 import { AssistantMessage, UserMessage } from "../components/chat/message";
 import { Composer } from "../components/chat/composer";
 import { StarterSuggestions } from "../components/chat/starter-suggestions";
+import { KeyNotice } from "../components/chat/key-notice";
 import { AdminButton } from "../components/admin-button";
 import { BackgroundShapes } from "../components/background-shapes";
 import { Button } from "../components/ui/button";
@@ -270,6 +271,7 @@ export default function ChatPage() {
                   What are we building{firstName ? `, ${firstName}` : ""}?
                 </h2>
               </div>
+              <KeyNotice />
               <Composer busy={chat.busy} onSend={send} onStop={chat.stop} allowPhotos autoFocus />
               <StarterSuggestions onPick={(s) => void send(s, [])} />
             </motion.div>

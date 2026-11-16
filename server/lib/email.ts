@@ -1,12 +1,14 @@
+import { env } from "cloudflare:workers";
 import { LogLevel, WorkerMailer } from "worker-mailer";
 
-// Sends the 6-digit signup codes through the team Gmail.
+// Sends the 6-digit signup codes. The first one that's set up wins:
 //
-// Settings: SMTP_HOST and SMTP_PORT are in wrangler.jsonc. SMTP_USER (the
-// Gmail address) and SMTP_PASS (a Gmail "app password") are secrets — in
-// `.env` on your own computer, `npx wrangler secret put` for the real app.
-// Without SMTP_USER/SMTP_PASS the code is printed to the server log instead,
-// so signup still works when testing on your own computer.
+//   1. A Gmail account: SMTP_USER (the Gmail address) and SMTP_PASS (a Gmail
+//      "app password") secrets. SMTP_HOST and SMTP_PORT are in wrangler.jsonc.
+//   2. Cloudflare Email Sending: the EMAIL binding plus EMAIL_FROM in
+//      wrangler.jsonc, an address on a domain set up for sending in Cloudflare.
+//   3. Neither: the code is printed to the server log, so signup still works
+//      when testing on your own computer.
 
 /** Email someone their signup code. Throws if the email could not be sent. */
 export async function sendCodeEmail(to: string, code: string): Promise<void> {
@@ -15,11 +17,7 @@ export async function sendCodeEmail(to: string, code: string): Promise<void> {
   const user = process.env.SMTP_USER?.trim();
   const pass = process.env.SMTP_PASS?.replace(/\s/g, ""); // Google shows app passwords with spaces
 
-  if (!user || !pass) {
-    console.log(`[email] Code for ${to}: ${code} (email isn't set up yet — see README)`);
-    return;
-  }
-
+  const subject = `Your 972 Chat Bot code: ${code}`;
   const text =
     `Your 972 Chat Bot code is ${code}\n\n` +
     "It expires in 10 minutes. If you didn't ask for this, ignore this email.\n";
@@ -29,6 +27,21 @@ export async function sendCodeEmail(to: string, code: string): Promise<void> {
       <p style="font-size: 30px; font-weight: 700; letter-spacing: 6px; margin: 16px 0;">${code}</p>
       <p style="color: #57534e;">It expires in 10 minutes. If you didn't ask for this, ignore this email.</p>
     </div>`;
+
+  if (!user || !pass) {
+    const from = process.env.EMAIL_FROM?.trim();
+    const onOwnComputer = (process.env.APP_URL ?? "").startsWith("http://localhost");
+    if (!env.EMAIL || !from || onOwnComputer) {
+      console.log(`[email] Code for ${to}: ${code} (email isn't set up yet — see README)`);
+      return;
+    }
+    try {
+      await env.EMAIL.send({ to, from: { name: "972 Chat Bot", email: from }, subject, text, html });
+    } catch (err) {
+      throw new Error(`Cloudflare wouldn't send the code to ${to}. (${errorText(err)})`);
+    }
+    return;
+  }
 
   let mailer: WorkerMailer;
   try {
@@ -57,7 +70,7 @@ export async function sendCodeEmail(to: string, code: string): Promise<void> {
     await mailer.send({
       from: { name: "972 Chat Bot", email: user },
       to,
-      subject: `Your 972 Chat Bot code: ${code}`,
+      subject,
       text,
       html,
     });

@@ -21,11 +21,11 @@ export const readDocTool: AgentTool = {
   label: "Read doc",
   description:
     "Open one document from the team's reference library (the REFERENCE DOCS list " +
-    "in your instructions). Use it when a question needs machine procedures, specs, " +
-    "or safety details. Pass the exact filename from the list.",
+    "in your instructions). Use it when a question needs details a doc covers. " +
+    "Pass the exact filename from the list.",
   parameters: Type.Object({
     name: Type.String({
-      description: 'Exact filename from the reference docs list, e.g. "vertical-mill.md"',
+      description: 'Exact filename from the reference docs list, e.g. "frc-basics.md"',
     }),
   }),
   execute: async (_id, params) => {
