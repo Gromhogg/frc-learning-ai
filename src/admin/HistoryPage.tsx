@@ -133,9 +133,7 @@ export default function HistoryPage() {
       <PageHeader
         title="Versions"
         description={
-          tab === "versions"
-            ? "Every saved version of the prompt. Restoring an old one saves it again as the newest version — nothing is ever erased."
-            : "Who changed what, newest first: the prompt, suggestions, team facts, docs, and settings."
+          tab === "versions" ? undefined : "Who changed what, newest first: the prompt, suggestions, team facts, docs, and settings."
         }
       />
 
