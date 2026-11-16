@@ -18,7 +18,7 @@ export function StarterSuggestions({ onPick }: { onPick: (text: string) => void 
             key={s}
             type="button"
             onClick={() => onPick(s)}
-            className="rounded-2xl border border-line bg-surface px-4 py-3 text-left text-sm text-fg-2 transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-fg"
+            className="rounded-xl border border-line bg-surface px-4 py-3 text-left text-sm text-fg-2 transition-colors hover:border-line-strong hover:bg-surface-2 hover:text-fg"
           >
             {s}
           </button>

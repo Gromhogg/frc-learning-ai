@@ -427,7 +427,7 @@ export default function PromptPage() {
             <MenuTrigger asChild>
               <button
                 type="button"
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-line py-3 text-sm text-muted transition-colors hover:border-line-strong hover:bg-surface hover:text-fg"
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-line py-3 text-sm text-muted transition-colors hover:border-line-strong hover:bg-surface hover:text-fg"
               >
                 <Plus className="size-4" />
                 Add section

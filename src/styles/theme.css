@@ -96,6 +96,14 @@
   --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Two corner sizes for the whole app: 12px for buttons, inputs, and menu
+     items; 24px for boxes, cards, and panels (like the message box). */
+  --radius-md: 0.75rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 1.5rem;
 }
 
 @layer base {
