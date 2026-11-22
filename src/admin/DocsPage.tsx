@@ -106,7 +106,7 @@ export default function DocsPage() {
     <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
       <PageHeader
         title="Reference docs"
-        description="Machine procedures, specs, and team guides the AI can open while answering. Plain text or Markdown files, up to 100 KB each."
+        description="Machine procedures, specs, and team guides the AI can open while answering, up to 100 KB each."
       />
 
       <div className="mb-4 inline-flex rounded-xl bg-surface-2 p-1">

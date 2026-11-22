@@ -1,23 +1,41 @@
 import { count, eq } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { settings, userApiKeys } from "../../db/schema.ts";
+import type { PaidProvider } from "./models.ts";
 
-// Which Claude API key a request runs on.
+// Paid AI keys. The free model needs none (see free-model.ts).
 //
-//   1. the person's own key, if they added one (their chats, Slack chats,
-//      starter suggestions, and an admin's prompt-assistant chats)
-//   2. else the team key an admin set on the Settings page
-//   3. else the ANTHROPIC_API_KEY secret from setup
-//
-// Team jobs that aren't for one person (learning facts, reviews) start at 2.
+//   - Team keys: one Claude key and one OpenAI key, set by an admin on the
+//     Settings page (else the ANTHROPIC_API_KEY / OPENAI_API_KEY secret from
+//     setup). A paid model can be picked for an agent once its key is here.
+//   - Own keys: anyone can add their own Claude or OpenAI key from the menu
+//     and pick the model their chats use. Only their chats use it.
 //
 // Saved keys are encrypted with a key made from JWT_SECRET, so a copy of the
 // database alone doesn't give them away. Changing JWT_SECRET makes saved keys
 // unreadable; people then just add theirs again.
 
-const TEAM_KEY_SETTING = "ai.teamKey";
+/** Where each team key is stored. The Claude one keeps its first name. */
+const TEAM_KEY_SETTING: Record<PaidProvider, string> = {
+  anthropic: "ai.teamKey",
+  openai: "ai.teamKey.openai",
+};
 
-export const NO_KEY = "There's no AI key set up yet. Ask an admin, or add your own under API key in the menu.";
+/** Sealed in with each team key (see encryptKey). */
+const TEAM_KEY_OWNER: Record<PaidProvider, string> = {
+  anthropic: "team",
+  openai: "team:openai",
+};
+
+const SETUP_SECRET: Record<PaidProvider, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai: "OPENAI_API_KEY",
+};
+
+const COMPANY: Record<PaidProvider, string> = {
+  anthropic: "Anthropic",
+  openai: "OpenAI",
+};
 
 export interface TeamKeyInfo {
   /** "settings" = an admin set it in the app; "setup" = the server secret; "none" = no key at all. */
@@ -110,45 +128,56 @@ export function keyHint(plain: string): string {
   return `…${plain.slice(-4)}`;
 }
 
-/** Tidy what someone pasted and reject things that clearly aren't an API key. */
-export function cleanKey(raw: unknown): { ok: true; key: string } | { ok: false; error: string } {
+/** Tidy what someone pasted, reject things that clearly aren't an API key, and say whose key it is. */
+export function cleanKey(
+  raw: unknown,
+): { ok: true; key: string; provider: PaidProvider } | { ok: false; error: string } {
   const key = typeof raw === "string" ? raw.trim() : "";
   if (!key) return { ok: false, error: "Paste a key first." };
-  // Anthropic has more than one key style (sk-ant-api…, sk-ant-usr…), so
-  // only the start is checked here; checkKey() asks Anthropic for real.
-  if (!/^sk-ant-[0-9A-Za-z_-]{20,400}$/.test(key)) {
-    return { ok: false, error: "That doesn't look like a Claude API key. They start with sk-ant-." };
-  }
   if (key.startsWith("sk-ant-oat")) {
     return { ok: false, error: "That's a Claude subscription sign-in token, not an API key. Make an API key in the Claude Console." };
   }
-  return { ok: true, key };
+  // Each company has more than one key style (sk-ant-api…, sk-proj-…), so
+  // only the start is checked here; checkKey() asks the company for real.
+  if (/^sk-ant-[0-9A-Za-z_-]{20,400}$/.test(key)) return { ok: true, key, provider: "anthropic" };
+  if (/^sk-[0-9A-Za-z_-]{20,400}$/.test(key)) return { ok: true, key, provider: "openai" };
+  return {
+    ok: false,
+    error: "That doesn't look like an API key. Claude keys start with sk-ant-, OpenAI keys with sk-.",
+  };
 }
 
-/** Ask Anthropic whether the key works. Listing models costs nothing. */
-export async function checkKey(key: string): Promise<{ ok: true } | { ok: false; error: string }> {
+/** Ask the company whether the key works. Listing models costs nothing. */
+export async function checkKey(
+  provider: PaidProvider,
+  key: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const company = COMPANY[provider];
   try {
-    const res = await fetch("https://api.anthropic.com/v1/models?limit=1", {
-      headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
-    });
+    const res =
+      provider === "anthropic"
+        ? await fetch("https://api.anthropic.com/v1/models?limit=1", {
+            headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
+          })
+        : await fetch("https://api.openai.com/v1/models", { headers: { authorization: `Bearer ${key}` } });
     if (res.ok) return { ok: true };
-    if (res.status === 401) return { ok: false, error: "Anthropic didn't accept that key. Check you copied all of it." };
-    if (res.status === 403) return { ok: false, error: "That key isn't allowed to use Claude. Check it in the Claude Console." };
-    return { ok: false, error: "Couldn't check the key with Anthropic right now. Try again in a minute." };
+    if (res.status === 401) return { ok: false, error: `${company} didn't accept that key. Check you copied all of it.` };
+    if (res.status === 403) return { ok: false, error: `That key isn't allowed to use ${company}'s models. Check its settings with ${company}.` };
+    return { ok: false, error: `Couldn't check the key with ${company} right now. Try again in a minute.` };
   } catch {
-    return { ok: false, error: "Couldn't reach Anthropic to check the key. Try again in a minute." };
+    return { ok: false, error: `Couldn't reach ${company} to check the key. Try again in a minute.` };
   }
 }
 
-// ─── the team key ──────────────────────────────────────────────────────────
+// ─── the team keys ─────────────────────────────────────────────────────────
 
-// Each server copy remembers the team key for a short time, like the model
+// Each server copy remembers the team keys for a short time, like the model
 // choice (models.ts), so a change reaches every copy within a minute.
 const CACHE_MS = 60_000;
-let teamCache: { key: string | undefined; until: number } | null = null;
+const teamCache = new Map<PaidProvider, { key: string | undefined; until: number }>();
 
-async function readStoredTeamKey(): Promise<StoredTeamKey | null> {
-  const [row] = await db.select().from(settings).where(eq(settings.key, TEAM_KEY_SETTING));
+async function readStoredTeamKey(provider: PaidProvider): Promise<StoredTeamKey | null> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, TEAM_KEY_SETTING[provider]));
   if (!row) return null;
   try {
     return JSON.parse(row.value) as StoredTeamKey;
@@ -157,28 +186,33 @@ async function readStoredTeamKey(): Promise<StoredTeamKey | null> {
   }
 }
 
-/** The key team jobs run on (and everyone without their own key). */
-export async function teamApiKey(): Promise<string | undefined> {
-  if (teamCache && teamCache.until > Date.now()) return teamCache.key;
-  const stored = await readStoredTeamKey();
-  const fromSettings = stored ? await decryptKey(stored.encryptedKey, "team") : null;
-  const key = fromSettings || process.env.ANTHROPIC_API_KEY || undefined;
-  teamCache = { key, until: Date.now() + CACHE_MS };
+/** The team's key for one company, if there is one. */
+export async function teamApiKey(provider: PaidProvider): Promise<string | undefined> {
+  const cached = teamCache.get(provider);
+  if (cached && cached.until > Date.now()) return cached.key;
+  const stored = await readStoredTeamKey(provider);
+  const fromSettings = stored ? await decryptKey(stored.encryptedKey, TEAM_KEY_OWNER[provider]) : null;
+  const key = fromSettings || process.env[SETUP_SECRET[provider]] || undefined;
+  teamCache.set(provider, { key, until: Date.now() + CACHE_MS });
   return key;
 }
 
-/** What admins see about the team key. Never includes the key itself. */
-export async function teamKeyInfo(): Promise<TeamKeyInfo> {
-  const stored = await readStoredTeamKey();
+/** What admins see about a team key. Never includes the key itself. */
+export async function teamKeyInfo(provider: PaidProvider): Promise<TeamKeyInfo> {
+  const stored = await readStoredTeamKey(provider);
   if (stored) return { source: "settings", hint: stored.hint, setByName: stored.setByName, setAt: stored.setAt };
-  const setup = process.env.ANTHROPIC_API_KEY;
+  const setup = process.env[SETUP_SECRET[provider]];
   if (setup) return { source: "setup", hint: keyHint(setup), setByName: null, setAt: null };
   return { source: "none", hint: null, setByName: null, setAt: null };
 }
 
-export async function saveTeamKey(key: string, admin: { id: number; name: string }): Promise<void> {
+export async function saveTeamKey(
+  provider: PaidProvider,
+  key: string,
+  admin: { id: number; name: string },
+): Promise<void> {
   const value: StoredTeamKey = {
-    encryptedKey: await encryptKey(key, "team"),
+    encryptedKey: await encryptKey(key, TEAM_KEY_OWNER[provider]),
     hint: keyHint(key),
     setById: admin.id,
     setByName: admin.name,
@@ -187,37 +221,49 @@ export async function saveTeamKey(key: string, admin: { id: number; name: string
   const json = JSON.stringify(value);
   await db
     .insert(settings)
-    .values({ key: TEAM_KEY_SETTING, value: json })
+    .values({ key: TEAM_KEY_SETTING[provider], value: json })
     .onConflictDoUpdate({ target: settings.key, set: { value: json } });
-  teamCache = null;
+  teamCache.delete(provider);
 }
 
 /** Back to the setup secret (if there is one). */
-export async function removeTeamKey(): Promise<void> {
-  await db.delete(settings).where(eq(settings.key, TEAM_KEY_SETTING));
-  teamCache = null;
+export async function removeTeamKey(provider: PaidProvider): Promise<void> {
+  await db.delete(settings).where(eq(settings.key, TEAM_KEY_SETTING[provider]));
+  teamCache.delete(provider);
 }
 
 // ─── each person's own key ─────────────────────────────────────────────────
 
-export async function ownKeyInfo(userId: number): Promise<{ hint: string; addedAt: string | null } | null> {
+export interface OwnKeyInfo {
+  hint: string;
+  /** The model their chats use. Its company is the key's company. */
+  model: string;
+  addedAt: string | null;
+}
+
+export async function ownKeyInfo(userId: number): Promise<OwnKeyInfo | null> {
   const [row] = await db
-    .select({ hint: userApiKeys.hint, addedAt: userApiKeys.createdAt })
+    .select({ hint: userApiKeys.hint, model: userApiKeys.model, addedAt: userApiKeys.createdAt })
     .from(userApiKeys)
     .where(eq(userApiKeys.userId, userId));
   return row ?? null;
 }
 
-export async function saveOwnKey(userId: number, key: string): Promise<void> {
+export async function saveOwnKey(userId: number, key: string, model: string): Promise<void> {
   const values = {
     encryptedKey: await encryptKey(key, `user:${userId}`),
     hint: keyHint(key),
+    model,
     createdAt: new Date().toISOString(),
   };
   await db
     .insert(userApiKeys)
     .values({ userId, ...values })
     .onConflictDoUpdate({ target: userApiKeys.userId, set: values });
+}
+
+export async function setOwnModel(userId: number, model: string): Promise<void> {
+  await db.update(userApiKeys).set({ model }).where(eq(userApiKeys.userId, userId));
 }
 
 export async function removeOwnKey(userId: number): Promise<void> {
@@ -230,18 +276,13 @@ export async function countOwnKeys(): Promise<number> {
   return row?.n ?? 0;
 }
 
-/**
- * The key to use for something done for one person. `own` says whether it's
- * their key, so errors can tell them what to fix.
- */
-export async function apiKeyFor(userId: number): Promise<{ key: string | undefined; own: boolean }> {
+/** Someone's own key and the model they picked, or null if they haven't added one. */
+export async function ownKey(userId: number): Promise<{ key: string; model: string } | null> {
   const [row] = await db
-    .select({ encryptedKey: userApiKeys.encryptedKey })
+    .select({ encryptedKey: userApiKeys.encryptedKey, model: userApiKeys.model })
     .from(userApiKeys)
     .where(eq(userApiKeys.userId, userId));
-  if (row) {
-    const key = await decryptKey(row.encryptedKey, `user:${userId}`);
-    if (key) return { key, own: true };
-  }
-  return { key: await teamApiKey(), own: false };
+  if (!row) return null;
+  const key = await decryptKey(row.encryptedKey, `user:${userId}`);
+  return key ? { key, model: row.model } : null;
 }

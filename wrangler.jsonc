@@ -39,9 +39,11 @@
   // Sends the signup codes (see server/lib/email.ts). Only from EMAIL_FROM.
   "send_email": [{ "name": "EMAIL", "allowed_sender_addresses": ["noreply@charliesweetland.com"] }],
 
-  // Workers AI, for the mic button: OpenAI's Whisper turns speech into text.
-  // There's no copy of it on your computer, so `npm run dev` uses the real one
-  // (needs `npx wrangler login`). It costs about $0.0005 per minute of talking.
+  // Workers AI runs the free chat model (Gemma 4, see server/ai/free-model.ts)
+  // and the mic button (OpenAI's Whisper turns speech into text). There's no
+  // copy on your computer, so `npm run dev` uses the real one (needs
+  // `npx wrangler login`). Free up to 10,000 "neurons" a day; a chat answer
+  // is about 12, a minute of talking about 45.
   "ai": { "binding": "AI", "remote": true },
 
   "queues": {

@@ -66,13 +66,20 @@ owner. Only the owner can make or remove admins and change the admin password
 always an admin. The admin password starts as the `ADMIN_CODE` secret; once
 the owner changes it in the app, the new one is used instead.
 
-**API keys.** Chats run on the team's Claude API key. An admin can set or
-replace it in the app (Admin → **Settings** → Team API key); until then the
-`ANTHROPIC_API_KEY` secret is used. Anyone can run their own chats on their
-own key instead (avatar menu → **API key**) and switch back to the team key
-any time. Keys are checked with Anthropic before saving, stored locked
-(encrypted with `JWT_SECRET`), and never shown again, only their last 4
-characters. Background jobs (learning facts, reviews) always use the team key.
+**The AI.** Out of the box everything runs on **Gemma 4**, a free model from
+Google that Cloudflare Workers AI runs (no key needed). Cloudflare gives 10,000
+"neurons" a day for free, and a chat answer uses about 12. The app counts them
+and stops the free model at 9,000 a day (background jobs at 6,000), so it
+never goes over; it starts again at midnight UTC (4 PM in California).
+
+**API keys (optional).** An admin can add a Claude key and/or an OpenAI key
+(Admin → **Settings** → Paid AI keys; or the `ANTHROPIC_API_KEY` /
+`OPENAI_API_KEY` secrets). Each key unlocks that company's models on the same
+page, and the team pays that company per use. Anyone can also run their own
+chats on their own Claude or OpenAI key, with a model they pick (avatar menu →
+**API key**), and switch back to the team's AI any time. Keys are checked with
+their company before saving, stored locked (encrypted with `JWT_SECRET`), and
+never shown again, only their last 4 characters.
 
 **Nothing gets lost.** Prompt changes are saved as versions you can restore.
 If two admins edit at once, the second one sees both versions instead of
@@ -89,7 +96,8 @@ It costs about $0.0005 per minute of talking, on the Cloudflare account.
 Built with:
 - **Screens** — React 19, Vite, Tailwind, Radix menus and dialogs (`src/`)
 - **Server** — Hono, running on Cloudflare Workers (`server/`)
-- **AI** — Claude, run through the [Pi](https://pi.dev) agent kit
+- **AI** — Gemma 4 on Cloudflare Workers AI (free), or Claude / GPT with a
+  key, run through the [Pi](https://pi.dev) agent kit
   (`@mariozechner/pi-ai` and `@mariozechner/pi-agent-core`)
 - **Database** — Cloudflare D1 (SQLite in the cloud) with Drizzle (`db/`)
 - **Files** (reference docs, photos) — Cloudflare R2
@@ -110,12 +118,12 @@ To put it on the internet for the team, see
    <https://nodejs.org> and install it like any normal app.
 3. **A Terminal** — the text window where you type commands. Press
    <kbd>⌘ Space</kbd>, type "Terminal", press Enter.
-4. **An Anthropic API key** — this is what makes the AI work. It costs money
+4. **Optional: a Claude or OpenAI API key.** The app works without one, on
+   a free AI. A key lets you use Claude or GPT models instead. It costs money
    per use (usually pennies per conversation), billed to your account.
-   - Sign up at <https://console.anthropic.com>.
-   - Add some credit — a few dollars goes a long way.
-   - Under **Settings → API Keys**, create a key and copy it. It starts
-     with `sk-ant-…`.
+   - Claude: sign up at <https://console.anthropic.com>, add a few dollars of
+     credit, and create a key under **Settings → API Keys** (`sk-ant-…`).
+   - OpenAI: <https://platform.openai.com/api-keys> (`sk-…`).
 
 ### Step by step
 
@@ -147,8 +155,9 @@ Now open the new `.env` file and fill it in:
 ```bash
 open -e .env
 ```
-Three lines matter:
-- `ANTHROPIC_API_KEY=` — paste your `sk-ant-…` key here.
+These lines matter:
+- `ANTHROPIC_API_KEY=` / `OPENAI_API_KEY=` — optional; paste a key if you
+  have one.
 - `JWT_SECRET=` — type a long random string of letters and numbers. It
   doesn't matter what, as long as it's long and you keep it private.
 - `ADMIN_CODE=` — the admin password. Anyone who types this becomes an
@@ -265,13 +274,10 @@ Run each command below. Each one asks you to paste the value, then press
 Enter.
 
 ```bash
-npx wrangler secret put ANTHROPIC_API_KEY
 npx wrangler secret put JWT_SECRET
 npx wrangler secret put ADMIN_CODE
 npx wrangler secret put OWNER_EMAIL
 ```
-- `ANTHROPIC_API_KEY` — your `sk-ant-…` key. (You can also set or change
-  the team key later in the app: Admin → Settings.)
 - `JWT_SECRET` — a long random string. **If you moved old data in step 4,
   use the same one as in your old `.env`**, so people stay signed in. It
   also locks saved API keys, so if you ever change it, people need to add
@@ -380,7 +386,7 @@ Prerequisites: **Node 22+** and **npm**.
 
 ```bash
 npm install
-cp .env.example .env        # fill in ANTHROPIC_API_KEY, JWT_SECRET, ADMIN_CODE
+cp .env.example .env        # fill in JWT_SECRET, ADMIN_CODE (API keys optional)
 npm run db:migrate:local    # local D1 database (kept in .wrangler/)
 npm run dev                 # Vite + the Worker together, on :5173
 ```
@@ -411,14 +417,16 @@ The assistant and reviewer can never change the live prompt themselves. They
 can only write a draft (`prompt_drafts` table). Applying a draft saves a normal
 new prompt version, so it shows in **History** and can be undone.
 
-Admins pick which Claude model does each job on Admin → **Settings** (Haiku
-5.5, Sonnet 5.5, or Opus 5.5). The starting choices are in
-`server/lib/config.ts`:
+Admins pick which model does each job on Admin → **Settings**: Gemma 4
+(free), Claude Haiku / Sonnet / Opus 5.5 (with a Claude key), or GPT-5.4 nano /
+GPT-5.4 mini / GPT-5.5 (with an OpenAI key). The full list is in
+`server/ai/models.ts`. All three jobs start on the free model
+(`server/lib/config.ts`):
 
 ```ts
-export const TUTOR_MODEL  = "claude-sonnet-5-5"; // answers students
-export const EDITOR_MODEL = "claude-opus-5-5";   // prompt assistant + reviewer
-export const LEARN_MODEL  = "claude-haiku-5-5";  // picks up team facts + interests
+export const TUTOR_MODEL  = FREE_MODEL; // answers students
+export const EDITOR_MODEL = FREE_MODEL; // prompt assistant + reviewer
+export const LEARN_MODEL  = FREE_MODEL; // picks up team facts + interests
 ```
 
 Spending limits (reviews per day, facts per day, tool calls per message) are in

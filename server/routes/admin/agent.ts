@@ -7,8 +7,7 @@ import { requireAdmin, type AdminEnv } from "../../lib/require-auth.ts";
 import { createPromptEditor } from "../../agents/prompt-editor.ts";
 import { describePromptStep } from "../../agents/prompt-tools.ts";
 import { historyToMessages, orderedSender, runAgentTurn } from "../../ai/run-agent.ts";
-import { modelFor } from "../../ai/models.ts";
-import { NO_KEY, apiKeyFor } from "../../ai/api-keys.ts";
+import { teamAi, whyNot } from "../../ai/pick.ts";
 import { lastReview } from "../../agents/reviewer.ts";
 
 // Admin chats with the prompt-editor agent. Each admin sees only their own.
@@ -153,8 +152,9 @@ app.post("/:id/messages", async (c) => {
   const text = (raw ?? "").trim();
   if (!text) return c.json({ error: "Empty message." }, 400);
 
-  const apiKey = await apiKeyFor(adminId);
-  if (!apiKey.key) return c.json({ error: NO_KEY }, 503);
+  const ai = await teamAi("editor");
+  const blocked = await whyNot(ai);
+  if (blocked) return c.json({ error: blocked }, 503);
 
   const prior = await db
     .select()
@@ -172,17 +172,17 @@ app.post("/:id/messages", async (c) => {
   }
 
   const agent = await createPromptEditor({
-    history: historyToMessages(prior, await modelFor("editor")),
+    history: historyToMessages(prior, ai.model),
     adminId,
     chatId: chat.id,
-    apiKey: apiKey.key,
+    ai,
   });
 
   return streamSSE(c, async (stream) => {
     stream.onAbort(() => agent.abort());
     const { send, flushed } = orderedSender((data) => stream.writeSSE({ data }));
 
-    const result = await runAgentTurn(agent, { text }, send, describePromptStep, { ownKey: apiKey.own });
+    const result = await runAgentTurn(agent, { text }, send, describePromptStep, { ownKey: false });
 
     let messageId = 0;
     if (result.text || result.steps.length > 0) {

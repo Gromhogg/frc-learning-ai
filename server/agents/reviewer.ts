@@ -1,10 +1,11 @@
 import { Agent } from "@mariozechner/pi-agent-core";
-import { completeSimple } from "@mariozechner/pi-ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { settings } from "../../db/schema.ts";
-import { modelFor, withThinking } from "../ai/models.ts";
-import { teamApiKey } from "../ai/api-keys.ts";
+import { agentSettings } from "../ai/models.ts";
+import { canRunInBackground, teamAi } from "../ai/pick.ts";
+import { askOnce } from "../ai/ask-once.ts";
+import { freeBackAt } from "../ai/free-model.ts";
 import {
   MAX_PENDING_DRAFTS,
   REVIEW_DAILY_RUN_CAP,
@@ -102,8 +103,9 @@ export async function isReviewRunning(): Promise<boolean> {
  * undefined for the daily run.
  */
 export async function runReview(triggeredBy?: number): Promise<ReviewResult> {
-  const apiKey = await teamApiKey();
-  if (!apiKey) return { ok: false, reason: "There's no team API key yet. Add one on the Settings page." };
+  if (!(await canRunInBackground("editor")) || !(await canRunInBackground("learn"))) {
+    return { ok: false, reason: `The free AI has done all the background work it can today. Try again after ${freeBackAt()}.` };
+  }
 
   const capReached: ReviewResult = {
     ok: false,
@@ -131,18 +133,20 @@ export async function runReview(triggeredBy?: number): Promise<ReviewResult> {
 
     const draftIds: number[] = [];
     let toolCalls = 0;
+    const ai = await teamAi("editor");
+    const { thinkingLevel, onPayload } = agentSettings(ai.model, "high");
     const agent = new Agent({
-      getApiKey: async () => apiKey,
+      getApiKey: async () => ai.apiKey,
       initialState: {
         systemPrompt: REVIEWER_PROMPT,
-        model: await modelFor("editor"),
-        thinkingLevel: "off",
+        model: ai.model,
+        thinkingLevel,
         tools: [
           ...sharedReadTools,
           proposeChangeTool({ source: "review", createdBy: triggeredBy, onDraft: (id) => draftIds.push(id) }),
         ],
       },
-      onPayload: withThinking("high"),
+      onPayload,
       toolExecution: "sequential",
       beforeToolCall: async () => {
         toolCalls += 1;
@@ -294,23 +298,14 @@ async function notesOn(runId: string, chatIds: number[]): Promise<string[]> {
 async function noteOn(chatId: number): Promise<string | null> {
   const transcript = await transcriptOf(chatId, 8_000);
   if (!transcript) return null;
-  const reply = await completeSimple(
-    await modelFor("learn"),
-    {
-      systemPrompt: NOTE_PROMPT,
-      messages: [{ role: "user", content: transcript, timestamp: Date.now() }],
-    },
-    {
-      apiKey: await teamApiKey(),
-      onPayload: (payload) => ({ ...(payload as object), max_tokens: 1_000, output_config: { effort: "low" } }),
-    },
-  );
-  if (reply.stopReason !== "stop") throw new Error(reply.errorMessage ?? reply.stopReason);
-  const text = reply.content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("")
-    .trim();
+  const reply = await askOnce("learn", {
+    instructions: NOTE_PROMPT,
+    input: transcript,
+    maxTokens: 1_000,
+    use: "background",
+  });
+  if (!reply.ok) throw new Error(reply.error);
+  const text = reply.text;
   const title = transcript.split("\n", 1)[0];
   return `${title}\n${text || "No problems."}`;
 }

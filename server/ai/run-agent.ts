@@ -1,5 +1,6 @@
 import type { Agent, AgentMessage } from "@mariozechner/pi-agent-core";
 import type { AssistantMessage, ImageContent, Message } from "@mariozechner/pi-ai";
+import { freeUsedUpMessage, isFreeUsedUp } from "./free-model.ts";
 
 // Shared plumbing for every Pi agent that talks to the browser: runs one
 // turn, forwards what happens as small JSON events, and hands back what to
@@ -146,17 +147,18 @@ function friendlyError(m: AssistantMessage, ownKey: boolean): string {
   if (m.stopReason === "aborted") return "Stopped.";
   const raw = m.errorMessage ?? "";
   if (!raw) return "The AI declined to answer that one. Try asking another way.";
-  if (/authentication_error|invalid x-api-key|no api key|\b401\b/i.test(raw)) {
+  if (isFreeUsedUp(raw)) return freeUsedUpMessage();
+  if (/authentication_error|invalid x-api-key|incorrect api key|no api key|\b401\b/i.test(raw)) {
     return ownKey
-      ? "Your API key didn't work. Check it, or switch back to the team key under API key in the menu."
+      ? "Your API key didn't work. Check it, or switch back to the team's AI under API key in the menu."
       : "The team's AI key isn't working. Let an admin know, or add your own key under API key in the menu.";
   }
-  if (/credit balance/i.test(raw)) {
+  if (/credit balance|insufficient_quota|exceeded your current quota/i.test(raw)) {
     return ownKey
-      ? "Your API key is out of credit. Add credit in the Claude Console, or switch back to the team key under API key in the menu."
+      ? "Your API key is out of credit. Add credit with the company that made it, or switch back to the team's AI under API key in the menu."
       : "The team's AI key is out of credit. Let an admin know, or add your own key under API key in the menu.";
   }
-  if (/rate.?limit|429|overloaded|529/i.test(raw)) {
+  if (/rate.?limit|429|overloaded|529|capacity/i.test(raw)) {
     return "The AI is busy right now. Wait a moment and try again.";
   }
   console.error("Agent error:", raw);

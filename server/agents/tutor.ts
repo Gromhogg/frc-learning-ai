@@ -5,7 +5,8 @@ import { buildSystemPrompt } from "../lib/prompt.ts";
 import { MAX_DOC_READS_PER_TURN } from "../lib/config.ts";
 import { findImages } from "../lib/image-search.ts";
 import { hasWebSearch, webSearch } from "../lib/web-search.ts";
-import { modelFor, withThinking } from "../ai/models.ts";
+import { agentSettings } from "../ai/models.ts";
+import type { AiSetup } from "../ai/pick.ts";
 import type { AgentMessage } from "@mariozechner/pi-agent-core";
 import type { DescribeStep } from "../ai/run-agent.ts";
 
@@ -150,20 +151,21 @@ export const describeTutorStep: DescribeStep = (tool, args) => {
   }
 };
 
-/** `apiKey`: whose Claude key to run on (see ai/api-keys.ts). */
-export async function createTutor(history: AgentMessage[], apiKey: string | undefined): Promise<Agent> {
+/** `ai`: the model and key to run on (see ai/pick.ts). */
+export async function createTutor(history: AgentMessage[], ai: AiSetup): Promise<Agent> {
   const used = new Map<string, number>();
+  // Chat answers don't need deep thinking; low effort keeps replies quick.
+  const { thinkingLevel, onPayload } = agentSettings(ai.model, "low", 16_000);
   return new Agent({
-    getApiKey: async () => apiKey,
+    getApiKey: async () => ai.apiKey,
     initialState: {
       systemPrompt: await buildSystemPrompt(),
-      model: await modelFor("tutor"),
-      thinkingLevel: "off",
+      model: ai.model,
+      thinkingLevel,
       tools: getTutorTools(),
       messages: history,
     },
-    // Chat answers don't need deep thinking; low effort keeps replies quick.
-    onPayload: withThinking("low", 16_000),
+    onPayload,
     toolExecution: "sequential",
     // Bound the cost of one answer, counted per tool.
     beforeToolCall: async ({ toolCall }) => {

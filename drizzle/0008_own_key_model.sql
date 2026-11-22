@@ -1,0 +1,1 @@
+ALTER TABLE `user_api_keys` ADD `model` text DEFAULT 'claude-sonnet-5-5' NOT NULL;

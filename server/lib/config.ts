@@ -1,16 +1,23 @@
-// Which Claude model each agent uses. Change these lines to switch models.
-//
-//   claude-opus-5-5     $4   / $20  per million tokens  (strongest)
-//   claude-sonnet-5-5   $2   / $10  per million tokens
-//   claude-haiku-5-5    $0.1 / $0.5 per million tokens  (cheapest)
+// Which AI model each agent uses when no admin has picked one on the
+// Settings page. All three start on the free model (Gemma 4, run by
+// Cloudflare Workers AI). Admins can switch any of them to a Claude or GPT
+// model once they add that company's key. The full list is in ai/models.ts.
 //
 // TUTOR_MODEL answers students. EDITOR_MODEL powers the prompt editor admins
-// chat with and the reviewer that reads recent chats — both write prompt
-// drafts, so they get the strongest model. LEARN_MODEL quietly pulls team
-// facts out of finished chats — a simple task, and every fact is reviewed.
-export const TUTOR_MODEL = "claude-sonnet-5-5";
-export const EDITOR_MODEL = "claude-opus-5-5";
-export const LEARN_MODEL = "claude-haiku-5-5";
+// chat with and the reviewer that reads recent chats. LEARN_MODEL quietly
+// pulls team facts out of finished chats and writes starter suggestions.
+export const FREE_MODEL = "@cf/google/gemma-4-26b-a4b-it";
+export const TUTOR_MODEL = FREE_MODEL;
+export const EDITOR_MODEL = FREE_MODEL;
+export const LEARN_MODEL = FREE_MODEL;
+
+// The free model's daily budget, in Cloudflare "neurons". Cloudflare gives
+// 10,000 a day for free (it starts over at midnight UTC) and the mic button's
+// voice-to-text uses some too. One chat answer is about 12. Chats stop at
+// FREE_DAILY_NEURONS; background jobs stop earlier, so they never use up
+// what students need.
+export const FREE_DAILY_NEURONS = 9_000;
+export const FREE_BACKGROUND_NEURONS = 6_000;
 
 // The app's public address, with no "/" at the end. Set in wrangler.jsonc
 // (the workers.dev address once it's live). Used for Google sign-in.

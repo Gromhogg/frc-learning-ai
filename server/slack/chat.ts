@@ -13,8 +13,7 @@ import { isSchoolEmail } from "../lib/school-email.ts";
 import { takeAttempt } from "../lib/limits.ts";
 import { createTutor, describeTutorStep } from "../agents/tutor.ts";
 import { historyToMessages, runAgentTurn, type StepImage } from "../ai/run-agent.ts";
-import { modelFor } from "../ai/models.ts";
-import { apiKeyFor } from "../ai/api-keys.ts";
+import { chatAi, whyNot, type AiSetup } from "../ai/pick.ts";
 import { botIdentity, postMessage, slackApiForm, updateMessage } from "./api.ts";
 import { appUrl } from "./alerts.ts";
 import { answerBlocks, clampText, escapeSlack, markdownToMrkdwn, slackToPlain } from "./format.ts";
@@ -38,7 +37,6 @@ export const SLACK_TEXT = {
   sorry: "Sorry — something went wrong. Try again.",
   schoolOnly: "I can only chat with school accounts — use the Slack account with your school email.",
   hello: "Hi! Ask me anything about the robot, the shop, or robotics.",
-  noKey: "There's no AI key set up yet. Ask an admin, or add your own under API key in the web app's menu.",
 };
 
 /** First line of the first question, used as the sidebar label (same as the web chat). */
@@ -184,7 +182,7 @@ async function conversationFor(job: ChatJob, userId: number, text: string): Prom
  * Save the question, run the tutor on the saved history (same flow as the
  * web chat), and save the answer. Returns what to show in Slack.
  */
-async function runTutor(conversationId: number, text: string, apiKey: { key: string | undefined; own: boolean }) {
+async function runTutor(conversationId: number, text: string, ai: AiSetup) {
   const [question] = await db
     .insert(messages)
     .values({ conversationId, role: "user", text, images: "[]" })
@@ -197,8 +195,8 @@ async function runTutor(conversationId: number, text: string, apiKey: { key: str
     .where(and(eq(messages.conversationId, conversationId), lt(messages.id, question.id)))
     .orderBy(asc(messages.id));
 
-  const agent = await createTutor(historyToMessages(rows, await modelFor("tutor")), apiKey.key);
-  const result = await runAgentTurn(agent, { text }, () => {}, describeTutorStep, { ownKey: apiKey.own });
+  const agent = await createTutor(historyToMessages(rows, ai.model), ai);
+  const result = await runAgentTurn(agent, { text }, () => {}, describeTutorStep, { ownKey: ai.own });
 
   let messageId = 0;
   if (result.text || result.steps.length > 0) {
@@ -256,9 +254,10 @@ export async function handleChat(job: ChatJob): Promise<void> {
     return;
   }
 
-  const apiKey = await apiKeyFor(userId);
-  if (!apiKey.key) {
-    await reply(SLACK_TEXT.noKey);
+  const ai = await chatAi(userId);
+  const blocked = await whyNot(ai);
+  if (blocked) {
+    await reply(blocked);
     return;
   }
 
@@ -266,7 +265,7 @@ export async function handleChat(job: ChatJob): Promise<void> {
   const placeholderTs = await reply(SLACK_TEXT.thinking);
 
   try {
-    const answer = await runTutor(conversation.id, text, apiKey);
+    const answer = await runTutor(conversation.id, text, ai);
     if (answer.messageId) {
       await db
         .insert(slackMessages)

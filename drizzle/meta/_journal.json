@@ -57,6 +57,13 @@
       "when": 1794792083991,
       "tag": "0007_interests_about",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794956710963,
+      "tag": "0008_own_key_model",
+      "breakpoints": true
     }
   ]
 }

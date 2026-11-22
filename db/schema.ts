@@ -184,6 +184,9 @@ export const userApiKeys = sqliteTable("user_api_keys", {
   encryptedKey: text("encrypted_key").notNull(),
   // e.g. "…a1B2"
   hint: text("hint").notNull(),
+  // The model their chats use (a Claude or GPT id from server/ai/models.ts).
+  // Keys saved before there was a choice were all Claude keys.
+  model: text("model").notNull().default("claude-sonnet-5-5"),
   createdAt: text("created_at").default(sql`CURRENT_TIMESTAMP`),
 });
 

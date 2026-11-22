@@ -24,14 +24,18 @@ Good to know:
 
 1. **Make an account** like a student. Then click **Admin** (top right) and
    type the admin password. You only do this once.
-2. **First time only: add the team's Claude API key.** Go to **Admin →
-   Settings → Team API key** and paste it. Until then, the bot is switched
-   off for everyone.
-   - Get a key at <https://console.anthropic.com> → **Settings → API Keys**.
-     It starts with `sk-ant-`.
-   - Add some credit under **Billing**. A few dollars lasts a long time.
-   - Tip: set a monthly limit under **Settings → Limits** so the cost can't
-     surprise anyone.
+2. **The bot works right away, for free.** It runs on Gemma 4, a free AI
+   from Google that Cloudflare runs for us. It has a daily limit (hundreds of
+   chats). If the team ever uses it all, it's back at 4 PM.
+   - **Optional: a smarter AI.** Add a Claude key or an OpenAI key in
+     **Admin → Settings → Paid AI keys**, then pick a Claude or GPT model for
+     each job on the same page. The team pays that company per use.
+   - Claude keys: <https://console.anthropic.com> → **Settings → API Keys**
+     (starts with `sk-ant-`). OpenAI keys: <https://platform.openai.com/api-keys>
+     (starts with `sk-`). Add a few dollars of credit, and set a monthly limit
+     there so the cost can't surprise anyone.
+   - Anyone can also use their own key for their own chats: avatar menu →
+     **API key**.
 3. **Once a week or so:**
    - **Team facts** — the bot picks up facts about our team from chats.
      Approve the true ones; remove the wrong ones. It only uses approved facts.
@@ -43,6 +47,6 @@ Good to know:
 
 ## Cost
 
-- **The AI** is billed to the team's Anthropic account, per use. Most chats
-  cost a few cents or less.
+- **The AI** is free up to a daily limit. If you add a Claude or OpenAI key,
+  that company bills the team per use. Most chats cost a few cents or less.
 - **Hosting** is already set up and paid for.

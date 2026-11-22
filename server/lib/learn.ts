@@ -1,4 +1,3 @@
-import { completeSimple } from "@mariozechner/pi-ai";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { conversations, messages } from "../../db/schema.ts";
@@ -17,8 +16,8 @@ import {
 import { recordInterests } from "./interests.ts";
 // Renamed here only because the React lint rule treats any "use…" name as a React hook.
 import { countToday, today, useDailyAllowance as takeDailyAllowance } from "./limits.ts";
-import { modelFor } from "../ai/models.ts";
-import { teamApiKey } from "../ai/api-keys.ts";
+import { askOnce, parseJsonReply } from "../ai/ask-once.ts";
+import { canRunInBackground } from "../ai/pick.ts";
 
 // Background fact learning, one batch per conversation instead of one LLM
 // call per message. A timed job runs runLearnSweep() every 5 minutes; it asks
@@ -121,7 +120,7 @@ const SWEEP_MAX_CONVERSATIONS = 10;
  * anything between runs. Returns how many conversations it learned from.
  */
 export async function runLearnSweep(): Promise<number> {
-  if (!(await teamApiKey())) return 0;
+  if (!(await canRunInBackground("learn"))) return 0;
   if ((await countToday("learn:total")) >= LEARN_DAILY_CALL_CAP) return 0;
 
   // Message times are SQLite "YYYY-MM-DD HH:MM:SS" (UTC), so plain text
@@ -170,7 +169,7 @@ export async function learnFromConversation(
   conversationId: number,
 ): Promise<"learned" | "skipped" | "daily-cap"> {
   try {
-    if (!(await teamApiKey())) return "skipped";
+    if (!(await canRunInBackground("learn"))) return "skipped";
 
     const [conversation] = await db
       .select()
@@ -277,31 +276,13 @@ export async function runExtraction(
   existingList: string,
   transcript: string,
 ): Promise<{ ok: true; extraction: Extraction } | { ok: false; error: string }> {
-  const reply = await completeSimple(
-    await modelFor("learn"),
-    {
-      systemPrompt: EXTRACT_INSTRUCTIONS,
-      messages: [
-        {
-          role: "user",
-          content: `FACTS ALREADY ON FILE:\n${existingList}\n\nTHE CONVERSATION:\n${transcript}`,
-          timestamp: Date.now(),
-        },
-      ],
-    },
-    {
-      apiKey: await teamApiKey(),
-      onPayload: (payload) => ({
-        ...(payload as object),
-        max_tokens: 2_000,
-        output_config: { effort: "low", format: { type: "json_schema", schema: EXTRACTION_SCHEMA } },
-      }),
-    },
-  );
-  if (reply.stopReason !== "stop") return { ok: false, error: reply.errorMessage ?? reply.stopReason };
-  const json = reply.content
-    .filter((part) => part.type === "text")
-    .map((part) => part.text)
-    .join("");
-  return { ok: true, extraction: JSON.parse(json) as Extraction };
+  const reply = await askOnce("learn", {
+    instructions: EXTRACT_INSTRUCTIONS,
+    input: `FACTS ALREADY ON FILE:\n${existingList}\n\nTHE CONVERSATION:\n${transcript}`,
+    maxTokens: 2_000,
+    schema: EXTRACTION_SCHEMA,
+    use: "background",
+  });
+  if (!reply.ok) return reply;
+  return { ok: true, extraction: parseJsonReply<Extraction>(reply.text) };
 }

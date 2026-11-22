@@ -1,5 +1,5 @@
-import { completeSimple } from "@mariozechner/pi-ai";
-import { modelFor } from "../ai/models.ts";
+import { askOnce, parseJsonReply } from "../ai/ask-once.ts";
+import { freeUsedUpMessage } from "../ai/free-model.ts";
 
 // Turns what someone typed or said about themself in "Your interests" into
 // topics, a main focus, and one line about their experience. One small AI call.
@@ -31,30 +31,23 @@ export interface Described {
   about: string;
 }
 
-/** Returns null if the AI call failed. */
-export async function describeInterests(text: string, apiKey: string): Promise<Described | null> {
+const COULDNT = "The AI couldn't read that right now. Try again in a minute.";
+
+/** Returns { error } (words for the person) if the AI call failed. */
+export async function describeInterests(text: string): Promise<Described | { error: string }> {
   try {
-    const reply = await completeSimple(
-      await modelFor("learn"),
-      { systemPrompt: INSTRUCTIONS, messages: [{ role: "user", content: text, timestamp: Date.now() }] },
-      {
-        apiKey,
-        onPayload: (payload) => ({
-          ...(payload as object),
-          max_tokens: 600,
-          output_config: { effort: "low", format: { type: "json_schema", schema: SCHEMA } },
-        }),
-      },
-    );
-    if (reply.stopReason !== "stop") {
-      console.error(`Describing interests failed: ${reply.errorMessage ?? reply.stopReason}`);
-      return null;
+    const reply = await askOnce("learn", {
+      instructions: INSTRUCTIONS,
+      input: text,
+      maxTokens: 600,
+      schema: SCHEMA,
+      use: "chat",
+    });
+    if (!reply.ok) {
+      console.error(`Describing interests failed: ${reply.error}`);
+      return { error: reply.usedUp ? freeUsedUpMessage() : COULDNT };
     }
-    const json = reply.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("");
-    const data = JSON.parse(json) as Partial<Described>;
+    const data = parseJsonReply<Partial<Described>>(reply.text);
     return {
       topics: Array.isArray(data.topics) ? data.topics.filter((t): t is string => typeof t === "string") : [],
       focus: typeof data.focus === "string" ? data.focus : "",
@@ -62,6 +55,6 @@ export async function describeInterests(text: string, apiKey: string): Promise<D
     };
   } catch (err) {
     console.error("Describing interests failed:", err);
-    return null;
+    return { error: COULDNT };
   }
 }

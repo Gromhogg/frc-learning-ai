@@ -7,8 +7,7 @@ import { getAuth } from "../lib/require-auth.ts";
 import { readImageForModel, MAX_IMAGES_PER_MESSAGE } from "../lib/uploads.ts";
 import { createTutor, describeTutorStep } from "../agents/tutor.ts";
 import { historyToMessages, orderedSender, runAgentTurn } from "../ai/run-agent.ts";
-import { modelFor } from "../ai/models.ts";
-import { NO_KEY, apiKeyFor } from "../ai/api-keys.ts";
+import { chatAi, whyNot } from "../ai/pick.ts";
 import type { ImageContent } from "@mariozechner/pi-ai";
 
 const app = new Hono();
@@ -49,10 +48,11 @@ app.post("/", async (c) => {
     .where(and(eq(conversations.id, conversationId), eq(conversations.userId, auth.userId)));
   if (!conversation) return c.json({ error: "Conversation not found." }, 404);
 
-  // Checked before anything is saved, so a missing key doesn't leave a
-  // question with no answer.
-  const apiKey = await apiKeyFor(auth.userId);
-  if (!apiKey.key) return c.json({ error: NO_KEY }, 503);
+  // Checked before anything is saved, so a used-up free allowance doesn't
+  // leave a question with no answer.
+  const ai = await chatAi(auth.userId);
+  const blocked = await whyNot(ai);
+  if (blocked) return c.json({ error: blocked }, 503);
 
   let userText: string;
   let userImages: string[];
@@ -119,7 +119,7 @@ app.post("/", async (c) => {
     })),
   );
 
-  const agent = await createTutor(historyToMessages(prior, await modelFor("tutor")), apiKey.key);
+  const agent = await createTutor(historyToMessages(prior, ai.model), ai);
 
   return streamSSE(c, async (stream) => {
     stream.onAbort(() => agent.abort());
@@ -130,7 +130,7 @@ app.post("/", async (c) => {
       { text: userText, images: await imagesFor(userImages) },
       send,
       describeTutorStep,
-      { ownKey: apiKey.own },
+      { ownKey: ai.own },
     );
 
     // Save whatever was written, even after a stop or an error, so the

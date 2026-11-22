@@ -33,6 +33,14 @@ export async function useDailyAllowance(key: string, cap: number): Promise<boole
   return rows.length > 0;
 }
 
+/** Add `amount` to today's count for `key` (no cap). */
+export async function addToday(key: string, amount: number): Promise<void> {
+  await db.run(sql`
+    INSERT INTO usage_counters (key, day, count) VALUES (${key}, ${today()}, ${amount})
+    ON CONFLICT (key, day) DO UPDATE SET count = count + ${amount}
+  `);
+}
+
 /**
  * Rate limit: at most `max` attempts per `windowMs` for `key`.
  * Returns { allowed, retryAfterMs }. Each call counts as one attempt.

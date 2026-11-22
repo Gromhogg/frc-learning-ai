@@ -94,8 +94,13 @@ export interface TrashedDoc {
 
 export type AgentRole = "tutor" | "editor" | "learn";
 
+/** "free" needs no key; the others need that company's API key. */
+export type Provider = "free" | "anthropic" | "openai";
+export type PaidProvider = Exclude<Provider, "free">;
+
 export interface ModelChoice {
   id: string;
+  provider: Provider;
   label: string;
   price: string;
   tier: string;
@@ -104,16 +109,23 @@ export interface ModelChoice {
 export interface ModelSettings {
   choices: ModelChoice[];
   models: Record<AgentRole, string>;
+  /** Which companies the team has a key for. */
+  keys: Record<PaidProvider, boolean>;
 }
 
-export interface TeamKeyStatus {
+export interface TeamKeyInfo {
   /** "settings" = an admin set it here; "setup" = the server secret; "none" = no key. */
   source: "settings" | "setup" | "none";
   /** e.g. "…a1B2" */
   hint: string | null;
   setByName: string | null;
   setAt: string | null;
-  /** How many people use their own key instead. */
+}
+
+export interface TeamKeys {
+  anthropic: TeamKeyInfo;
+  openai: TeamKeyInfo;
+  /** How many people use their own key. */
   ownKeyCount: number;
 }
 
@@ -222,15 +234,15 @@ export const adminApi = {
       body: JSON.stringify({ role, model, expected }),
     }),
 
-  teamKey: () => api<TeamKeyStatus>("/api/admin/settings/api-key"),
-  setTeamKey: (key: string, expected: string | null) =>
-    api<TeamKeyStatus & { ok: true }>("/api/admin/settings/api-key", {
+  teamKeys: () => api<TeamKeys>("/api/admin/settings/api-key"),
+  setTeamKey: (provider: PaidProvider, key: string, expected: string | null) =>
+    api<TeamKeys & { ok: true }>(`/api/admin/settings/api-key/${provider}`, {
       method: "PUT",
       body: JSON.stringify({ key, expected }),
     }),
-  removeTeamKey: (expected: string | null) =>
-    api<TeamKeyStatus & { ok: true }>(
-      `/api/admin/settings/api-key?expected=${encodeURIComponent(expected ?? "")}`,
+  removeTeamKey: (provider: PaidProvider, expected: string | null) =>
+    api<TeamKeys & { ok: true }>(
+      `/api/admin/settings/api-key/${provider}?expected=${encodeURIComponent(expected ?? "")}`,
       { method: "DELETE" },
     ),
 

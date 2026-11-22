@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Eye, EyeOff, KeyRound, ShieldCheck, Users } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Users } from "lucide-react";
 import { toast } from "sonner";
 import { adminsApi, type AdminPerson, type Person } from "./admins-api";
 import { useAuth } from "../auth/auth-context";
@@ -23,15 +23,7 @@ export default function AdminsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1000px] px-4 py-6 sm:px-6 lg:px-8">
-      <PageHeader title="Admins" description="Everyone who can change the AI's instructions, facts, docs, and settings." />
-
-      <div className="mb-6 flex gap-3 rounded-2xl border border-line bg-surface-2/60 px-4 py-3 text-sm text-fg-2">
-        <ShieldCheck className="mt-0.5 size-4 shrink-0 text-muted" />
-        <p>
-          Anyone who enters the admin password becomes an admin.
-          {owner ? " You're the owner: you can change the password and make or remove admins." : " Only the owner can remove admins or change the password."}
-        </p>
-      </div>
+      <PageHeader title="Admins" />
 
       {owner ? (
         <>
@@ -120,7 +112,6 @@ function PeopleList() {
 
   return (
     <>
-      <h2 className="mb-2 text-sm font-semibold">Everyone</h2>
       <ul className="divide-y divide-line overflow-hidden rounded-2xl border border-line bg-surface">
         {sorted.map((person) => (
           <li key={person.id} className="flex items-center gap-3 px-4 py-3">

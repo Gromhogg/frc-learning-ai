@@ -4,7 +4,7 @@ import { slackChannelBuffer } from "../../db/schema.ts";
 import { LEARN_DAILY_CALL_CAP } from "../lib/config.ts";
 import { useDailyAllowance as takeDailyAllowance } from "../lib/limits.ts";
 import { runExtraction } from "../lib/learn.ts";
-import { teamApiKey } from "../ai/api-keys.ts";
+import { canRunInBackground } from "../ai/pick.ts";
 import { insertPendingFact, listFactsForExtraction, reinforceFact, trimQueues } from "../lib/facts.ts";
 import { channelName } from "./api.ts";
 import { slackToPlain } from "./format.ts";
@@ -89,7 +89,7 @@ export async function learnFromChannels(): Promise<void> {
       continue;
     }
     if (group.waiting < BATCH_SIZE && !group.quiet) continue;
-    if (!(await teamApiKey())) return;
+    if (!(await canRunInBackground("learn"))) return;
     if (!(await takeDailyAllowance("learn:total", LEARN_DAILY_CALL_CAP))) {
       console.log("[slack] channel learning: daily AI call cap reached, trying again tomorrow.");
       return;

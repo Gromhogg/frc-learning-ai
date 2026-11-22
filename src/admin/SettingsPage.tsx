@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Check } from "lucide-react";
 import { toast } from "sonner";
-import { adminApi, type AgentRole, type ModelSettings } from "./admin-api";
+import { adminApi, type AgentRole, type ModelChoice, type ModelSettings } from "./admin-api";
 import { ApiError, errorMessage } from "../lib/api";
 import { cn } from "../lib/cn";
 import { Badge, Skeleton, Spinner } from "../components/ui/misc";
@@ -13,7 +13,7 @@ const ROLES: { role: AgentRole; title: string; description: string }[] = [
   {
     role: "tutor",
     title: "Answers students",
-    description: "The AI students chat with. It runs on every message, so most of the cost is here.",
+    description: "The AI students chat with. It runs on every message, so most of the use is here.",
   },
   {
     role: "editor",
@@ -26,6 +26,13 @@ const ROLES: { role: AgentRole; title: string; description: string }[] = [
     description: "Reads finished chats in the background to pick up team facts and what each student is into.",
   },
 ];
+
+const KEY_NAMES = { anthropic: "Claude", openai: "OpenAI" } as const;
+
+/** A paid model can only be picked once the team has that company's key. */
+function locked(choice: ModelChoice, data: ModelSettings): boolean {
+  return choice.provider !== "free" && !data.keys[choice.provider];
+}
 
 export default function SettingsPage() {
   const [data, setData] = useState<ModelSettings | null>(null);
@@ -44,7 +51,8 @@ export default function SettingsPage() {
   }, [load]);
 
   async function choose(role: AgentRole, model: string, title: string) {
-    if (!data || saving || data.models[role] === model) return;
+    const choice = data?.choices.find((c) => c.id === model);
+    if (!data || !choice || saving || data.models[role] === model || locked(choice, data)) return;
     setSaving({ role, model });
     try {
       // Send the model we showed, so we never undo someone else's change unseen.
@@ -65,7 +73,7 @@ export default function SettingsPage() {
       <PageHeader title="Settings" />
 
       <div className="mb-4">
-        <TeamKeyCard />
+        <TeamKeyCard onChange={() => void load()} />
       </div>
 
       {data === null ? (
@@ -85,18 +93,19 @@ export default function SettingsPage() {
                 {data.choices.map((choice) => {
                   const current = data.models[role] === choice.id;
                   const busy = saving?.role === role && saving.model === choice.id;
+                  const needsKey = locked(choice, data);
                   return (
                     <button
                       key={choice.id}
                       type="button"
                       role="radio"
                       aria-checked={current}
-                      disabled={saving !== null}
+                      disabled={saving !== null || needsKey}
                       onClick={() => void choose(role, choice.id, title)}
                       className={cn(
                         "flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-colors disabled:cursor-default",
                         current ? "border-accent-line bg-accent-soft" : "border-line hover:bg-surface-2",
-                        saving !== null && !busy && !current && "opacity-60",
+                        ((saving !== null && !busy && !current) || needsKey) && "opacity-60",
                       )}
                     >
                       <span
@@ -111,9 +120,12 @@ export default function SettingsPage() {
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-medium">{choice.label}</span>
                           {current ? <Badge tone="accent">In use</Badge> : null}
+                          {choice.provider === "free" ? <Badge tone="good">Free</Badge> : null}
                         </span>
                         <span className="block text-xs text-muted">
-                          {choice.tier}
+                          {needsKey && choice.provider !== "free"
+                            ? `Add the ${KEY_NAMES[choice.provider]} key above to use this`
+                            : choice.tier}
                           <span className="sm:hidden"> · {choice.price}</span>
                         </span>
                       </span>

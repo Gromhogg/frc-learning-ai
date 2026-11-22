@@ -1,5 +1,6 @@
 import { Agent, type AgentMessage } from "@mariozechner/pi-agent-core";
-import { modelFor, withThinking } from "../ai/models.ts";
+import { agentSettings } from "../ai/models.ts";
+import type { AiSetup } from "../ai/pick.ts";
 import { EDITOR_MAX_TOOL_CALLS } from "../lib/config.ts";
 import { proposeChangeTool, sharedReadTools } from "./prompt-tools.ts";
 
@@ -23,23 +24,24 @@ export async function createPromptEditor(input: {
   history: AgentMessage[];
   adminId: number;
   chatId: number;
-  /** The admin's own key, else the team key (see ai/api-keys.ts). */
-  apiKey: string | undefined;
+  /** The team's prompt-assistant model and key (see ai/pick.ts). */
+  ai: AiSetup;
 }): Promise<Agent> {
   let toolCalls = 0;
+  const { thinkingLevel, onPayload } = agentSettings(input.ai.model, "medium");
   return new Agent({
-    getApiKey: async () => input.apiKey,
+    getApiKey: async () => input.ai.apiKey,
     initialState: {
       systemPrompt: EDITOR_PROMPT,
-      model: await modelFor("editor"),
-      thinkingLevel: "off",
+      model: input.ai.model,
+      thinkingLevel,
       tools: [
         ...sharedReadTools,
         proposeChangeTool({ source: "admin_chat", createdBy: input.adminId, agentChatId: input.chatId }),
       ],
       messages: input.history,
     },
-    onPayload: withThinking("medium"),
+    onPayload,
     toolExecution: "sequential",
     beforeToolCall: async () => {
       toolCalls += 1;

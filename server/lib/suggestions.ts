@@ -1,10 +1,9 @@
 import { waitUntil } from "cloudflare:workers";
-import { completeSimple } from "@mariozechner/pi-ai";
 import { and, desc, eq, ne } from "drizzle-orm";
 import { db } from "../../db/index.ts";
 import { conversations, teamFacts, userProfiles } from "../../db/schema.ts";
-import { modelFor } from "../ai/models.ts";
-import { apiKeyFor } from "../ai/api-keys.ts";
+import { askOnce, parseJsonReply } from "../ai/ask-once.ts";
+import { canRunInBackground } from "../ai/pick.ts";
 import type { Role } from "./jwt.ts";
 import { listDocs } from "./docs.ts";
 import { findProfile, signalKey, strongSignals, type Profile } from "./interests.ts";
@@ -151,8 +150,7 @@ async function buildInput(userId: number, role: Role, profile: Profile): Promise
  * (counted in the database, see limits.ts).
  */
 export async function rebuild(userId: number, role: Role): Promise<string[] | null> {
-  const { key: apiKey } = await apiKeyFor(userId);
-  if (!apiKey) return null;
+  if (!(await canRunInBackground("learn"))) return null;
   const busyKey = `suggest:busy:${userId}`;
   let mine = false;
   try {
@@ -165,30 +163,18 @@ export async function rebuild(userId: number, role: Role): Promise<string[] | nu
     if (!profile) return null;
     const startKey = signalKey(profile);
 
-    const reply = await completeSimple(
-      await modelFor("learn"),
-      {
-        systemPrompt: SUGGEST_INSTRUCTIONS,
-        messages: [{ role: "user", content: await buildInput(userId, role, profile), timestamp: Date.now() }],
-      },
-      {
-        apiKey,
-        onPayload: (payload) => ({
-          ...(payload as object),
-          max_tokens: 1_000,
-          output_config: { effort: "low", format: { type: "json_schema", schema: SUGGEST_SCHEMA } },
-        }),
-      },
-    );
-    if (reply.stopReason !== "stop") {
-      console.error(`Suggestions for user ${userId} failed: ${reply.errorMessage ?? reply.stopReason}`);
+    const reply = await askOnce("learn", {
+      instructions: SUGGEST_INSTRUCTIONS,
+      input: await buildInput(userId, role, profile),
+      maxTokens: 1_000,
+      schema: SUGGEST_SCHEMA,
+      use: "background",
+    });
+    if (!reply.ok) {
+      console.error(`Suggestions for user ${userId} failed: ${reply.error}`);
       return null;
     }
-    const json = reply.content
-      .filter((part) => part.type === "text")
-      .map((part) => part.text)
-      .join("");
-    const suggestions = cleanSuggestions((JSON.parse(json) as { suggestions?: unknown }).suggestions).slice(0, 4);
+    const suggestions = cleanSuggestions(parseJsonReply<{ suggestions?: unknown }>(reply.text).suggestions).slice(0, 4);
     if (suggestions.length < 4) {
       console.error(`Suggestions for user ${userId}: only ${suggestions.length} usable, keeping the old list.`);
       return null;
